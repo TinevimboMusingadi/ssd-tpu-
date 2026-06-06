@@ -39,10 +39,16 @@ def main() -> None:
     parser.add_argument("--mode", default="all", choices=["ar", "sd", "ssd", "instance", "all"])
     parser.add_argument("--num-prompts", type=int, default=3)
     parser.add_argument("--max-tokens", type=int, default=32)
+    parser.add_argument("--prompt", type=str, default=None, help="Custom prompt text (overrides defaults)")
     parser.add_argument("--output", type=str, default=None)
     args = parser.parse_args()
 
-    prompts = load_prompts(args.num_prompts)
+    if args.prompt:
+        prompts = [[ord(c) % 64 for c in args.prompt]]
+        if args.num_prompts > 1:
+            prompts = prompts * args.num_prompts
+    else:
+        prompts = load_prompts(args.num_prompts)
     modes = ["ar", "sd", "ssd", "instance"] if args.mode == "all" else [args.mode]
 
     results = []
