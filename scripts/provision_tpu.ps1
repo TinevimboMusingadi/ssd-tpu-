@@ -1,9 +1,12 @@
-# Provision TPU VM from .env and write TPU_SSH_HOST / TPU_SSH_USER back to .env
-# Usage: .\scripts\provision_tpu.ps1 [-Family v6e] [-VmName ssd-tpu-v6e-vm]
+# Provision TPU VM from .env and write SSH settings back to .env
+# Usage: .\scripts\provision_tpu.ps1 [-Family v6e] [-ChipCount 16] [-VmName ssd-tpu-v6e-16-vm]
 param(
     [ValidateSet("v6e", "v5p")]
     [string]$Family = "v6e",
-    [string]$VmName = "ssd-tpu-v6e-vm"
+    [ValidateSet(4, 8, 16, 32, 64, 128)]
+    [int]$ChipCount = 16,
+    [string]$VmName = "",
+    [int]$MaxRunHours = 4
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,17 +15,32 @@ $ErrorActionPreference = "Stop"
 if (-not $GCP_PROJECT) { throw "GCP_PROJECT missing in .env" }
 if (-not $TPU_ZONE) { throw "TPU_ZONE missing in .env" }
 
-if ($Family -eq "v5p") {
-    $MachineType = "ct5p-hightpu-4t"
-    if ($VmName -eq "ssd-tpu-v6e-vm") { $VmName = "ssd-tpu-v5p-vm" }
-} else {
-    $MachineType = "ct6e-standard-4t"
+if (-not $VmName) {
+    if ($env:TPU_VM_NAME) {
+        $VmName = $env:TPU_VM_NAME
+    } elseif ($Family -eq "v5p") {
+        $VmName = "ssd-tpu-v5p-${ChipCount}-vm"
+    } else {
+        $VmName = "ssd-tpu-v6e-${ChipCount}-vm"
+    }
 }
 
+if ($Family -eq "v5p") {
+    $MachineType = "ct5p-hightpu-${ChipCount}t"
+} else {
+    $MachineType = "ct6e-standard-${ChipCount}t"
+}
+
+$maxRun = "${MaxRunHours}h"
+
 Write-Host "=== Provision TPU VM ==="
-Write-Host "Project: $GCP_PROJECT"
-Write-Host "Zone:    $TPU_ZONE"
-Write-Host "VM:      $VmName ($Family / $MachineType)"
+Write-Host "Project:   $GCP_PROJECT"
+Write-Host "Zone:      $TPU_ZONE"
+Write-Host "VM:        $VmName"
+Write-Host "Family:    $Family"
+Write-Host "Chips:     $ChipCount"
+Write-Host "Machine:   $MachineType"
+Write-Host "Max run:   $maxRun"
 Write-Host ""
 Write-Host "Note: request-valid-for-duration max is 2h for FLEX_START."
 
@@ -43,7 +61,7 @@ if ($vmExists) {
         --machine-type=$MachineType `
         --provisioning-model=FLEX_START `
         --request-valid-for-duration=2h `
-        --max-run-duration=4h `
+        --max-run-duration=$maxRun `
         --instance-termination-action=DELETE `
         --image-project=ubuntu-os-accelerator-images `
         --image-family=ubuntu-accel-2204-amd64-tpu-v5e-v5p-v6e `
@@ -75,11 +93,11 @@ Write-Host "SSH user:    $sshUser"
 & (Join-Path $PSScriptRoot "update_env.ps1") -Key "TPU_SSH_HOST" -Value $ip
 & (Join-Path $PSScriptRoot "update_env.ps1") -Key "TPU_SSH_USER" -Value $sshUser
 & (Join-Path $PSScriptRoot "update_env.ps1") -Key "TPU_VM_NAME" -Value $VmName
+& (Join-Path $PSScriptRoot "update_env.ps1") -Key "TPU_SLICE_CHIPS" -Value "$ChipCount"
 
 Write-Host ""
 Write-Host "=== Next steps ==="
 Write-Host "1. SSH:  gcloud compute ssh $VmName --zone=$TPU_ZONE --project=$GCP_PROJECT"
-Write-Host "2. Or:   ssh ${sshUser}@${ip}"
-Write-Host "3. Test: python -m connect.diagnostics   (on VM after setup)"
+Write-Host "2. VM:    ./scripts/bootstrap_vm.sh --profile sd-pair-7b"
 Write-Host ""
-Write-Host ".env updated with TPU_SSH_HOST and TPU_SSH_USER"
+Write-Host ".env updated with TPU_SSH_HOST, TPU_VM_NAME, TPU_SLICE_CHIPS"

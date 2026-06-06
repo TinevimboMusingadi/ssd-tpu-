@@ -48,3 +48,6 @@ packages = ["connect", "jax_ssd", "tui"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "tpu: tests that require a TPU and real Gemma weights",
+]

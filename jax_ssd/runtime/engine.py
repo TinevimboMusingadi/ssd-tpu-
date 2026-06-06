@@ -42,6 +42,7 @@ class LLMEngine:
             num_blocks=config.num_blocks,
         )
         self.scheduler = Scheduler(config, self.page_manager)
+        alloc = config.mesh_allocation
         share_key = None
         if (
             not config.use_toy_model
@@ -53,12 +54,18 @@ class LLMEngine:
             config.target_model_path,
             use_toy=config.use_toy_model,
             share_key=share_key,
+            mesh=alloc.target_mesh if alloc else None,
+            devices=alloc.target_devices if alloc else None,
+            role="target",
         )
         self.draft = load_model_adapter(
             config.draft_model_path,
             use_toy=config.use_toy_model,
             seed=1,
             share_key=share_key,
+            mesh=alloc.draft_mesh if alloc else None,
+            devices=alloc.draft_devices if alloc else None,
+            role="draft",
         )
         self.draft_worker: DraftWorker | None = None
         if config.mode in (DecodeMode.SSD, DecodeMode.INSTANCE):

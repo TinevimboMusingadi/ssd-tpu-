@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Download default SD pair: Gemma-2.2B target + Gemma-2B draft (v6e-4 slice).
+# Download default SD pair for current MODEL_PROFILE (sd-pair-7b on v6e-16).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -19,4 +19,11 @@ if [ -d .venv ]; then
   PY=python
 fi
 
-$PY scripts/download_models.py --preset sd-pair
+PRESET="${MODEL_PROFILE:-sd-pair-7b}"
+GCS_URI="${GCS_BUCKET:-}"
+ARGS=(--preset "$PRESET")
+if [ -n "$GCS_URI" ]; then
+  ARGS+=(--gcs-uri "$GCS_URI")
+fi
+
+$PY scripts/download_models.py "${ARGS[@]}"

@@ -1,15 +1,21 @@
-"""Gemma model adapter — Flax causal LM on TPU."""
+"""Gemma model adapter — Flax causal LM on TPU with optional mesh sharding."""
 
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import jax
 import jax.numpy as jnp
+from jax.sharding import Mesh
 
+from connect.gcs_storage import resolve_model_path
 from jax_ssd.kernels.kv_cache import KVCacheState
 from jax_ssd.models.base import DecodeResult, PrefillResult, VerifyResultModel
+from jax_ssd.models.sharding import fsdp_shard_params, primary_device
+
+if TYPE_CHECKING:
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -24,25 +30,39 @@ class GemmaAdapter:
         model_path: str,
         vocab_size: int = 256_000,
         share_key: str | None = None,
+        mesh: Mesh | None = None,
+        devices: tuple[jax.Device, ...] | None = None,
+        role: str = "target",
     ) -> None:
-        if not Path(model_path).exists():
-            raise FileNotFoundError(model_path)
-
         from transformers import AutoTokenizer, FlaxAutoModelForCausalLM
 
+        local_path = resolve_model_path(model_path)
         self.model_path = model_path
-        self._tokenizer = AutoTokenizer.from_pretrained(model_path)
+        self.local_path = local_path
+        self._mesh = mesh
+        self._devices = devices or ()
+        self._role = role
+        self._device = primary_device(self._devices) if self._devices else None
+
+        self._tokenizer = AutoTokenizer.from_pretrained(local_path)
         key = share_key or model_path
         if key in _SHARED:
             self.model, self.params = _SHARED[key]
-            logger.info("Reusing loaded Gemma weights for %s", model_path)
+            logger.info("Reusing loaded Gemma weights for %s (%s)", model_path, role)
         else:
-            logger.info("Loading Gemma from %s (this may take a minute)...", model_path)
-            self.model = FlaxAutoModelForCausalLM.from_pretrained(
-                model_path,
-                dtype=jnp.bfloat16,
+            logger.info(
+                "Loading Gemma %s from %s (mesh=%s, devices=%d)...",
+                role,
+                local_path,
+                mesh.axis_names if mesh else None,
+                len(self._devices),
             )
-            self.params = self.model.params
+            with jax.default_device(self._device) if self._device else _nullcontext():
+                self.model = FlaxAutoModelForCausalLM.from_pretrained(
+                    local_path,
+                    dtype=jnp.bfloat16,
+                )
+                self.params = fsdp_shard_params(self.model.params, mesh)
             _SHARED[key] = (self.model, self.params)
 
         self.vocab_size = int(getattr(self.model.config, "vocab_size", vocab_size))
@@ -58,22 +78,28 @@ class GemmaAdapter:
         self.reset_cache()
         return self._dummy_kv
 
-    def _forward(
+    def _run_forward(
         self,
         input_ids: jax.Array,
         *,
         past_key_values: tuple | None = None,
         update_cache: bool = False,
     ) -> jax.Array:
-        outputs = self.model(
-            input_ids=input_ids,
-            past_key_values=past_key_values,
-            params=self.params,
-            train=False,
-        )
-        if update_cache:
-            self._past_key_values = outputs.past_key_values
-        return outputs.logits.astype(jnp.float32)
+        def _call():
+            outputs = self.model(
+                input_ids=input_ids,
+                past_key_values=past_key_values,
+                params=self.params,
+                train=False,
+            )
+            if update_cache:
+                self._past_key_values = outputs.past_key_values
+            return outputs.logits.astype(jnp.float32)
+
+        if self._mesh is not None:
+            with jax.set_mesh(self._mesh):
+                return _call()
+        return _call()
 
     def prefill(
         self,
@@ -82,7 +108,7 @@ class GemmaAdapter:
         page_table: jnp.ndarray,
     ) -> PrefillResult:
         input_ids = jnp.asarray(token_ids, dtype=jnp.int32)[None, :]
-        logits = self._forward(input_ids, update_cache=True)
+        logits = self._run_forward(input_ids, update_cache=True)
         return PrefillResult(logits=logits[0], kv_cache=kv_cache)
 
     def decode(
@@ -93,7 +119,7 @@ class GemmaAdapter:
         page_table: jnp.ndarray,
     ) -> DecodeResult:
         input_ids = jnp.array([[int(token_id)]], dtype=jnp.int32)
-        logits = self._forward(
+        logits = self._run_forward(
             input_ids,
             past_key_values=self._past_key_values,
             update_cache=True,
@@ -109,7 +135,7 @@ class GemmaAdapter:
         page_table: jnp.ndarray,
     ) -> VerifyResultModel:
         input_ids = jnp.asarray(token_ids_kp1, dtype=jnp.int32)[None, :]
-        logits = self._forward(
+        logits = self._run_forward(
             input_ids,
             past_key_values=self._past_key_values,
             update_cache=False,
@@ -119,7 +145,7 @@ class GemmaAdapter:
     def commit_tokens(self, token_ids: list[int]) -> None:
         for tok in token_ids:
             input_ids = jnp.array([[int(tok)]], dtype=jnp.int32)
-            self._forward(
+            self._run_forward(
                 input_ids,
                 past_key_values=self._past_key_values,
                 update_cache=True,
@@ -153,3 +179,11 @@ class GemmaAdapter:
 
     def tokenize(self, text: str) -> list[int]:
         return list(self._tokenizer.encode(text, add_special_tokens=True))
+
+
+class _nullcontext:
+    def __enter__(self):
+        return None
+
+    def __exit__(self, *args):
+        return False

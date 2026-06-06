@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Push HF_TOKEN from local .env to the TPU VM via gcloud ssh."""
+"""Push full .env profile from Windows to the TPU VM via gcloud ssh."""
 
 from __future__ import annotations
 
 import base64
+import json
 import os
 import subprocess
 import sys
@@ -11,19 +12,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-
-def _update_env_text(lines: list[str], key: str, value: str) -> list[str]:
-    out: list[str] = []
-    replaced = False
-    for line in lines:
-        if line.startswith(f"{key}="):
-            out.append(f"{key}={value}")
-            replaced = True
-        else:
-            out.append(line)
-    if not replaced:
-        out.append(f"{key}={value}")
-    return out
+from connect.profiles import get_profile, profile_env_defaults
 
 
 def main() -> None:
@@ -37,41 +26,82 @@ def main() -> None:
 
     project = os.getenv("GCP_PROJECT", "tpu-builder1")
     zone = os.getenv("TPU_ZONE", "us-east5-a")
-    vm = os.getenv("TPU_VM_NAME", "ssd-tpu-v6e-vm")
+    vm = os.getenv("TPU_VM_NAME", "ssd-tpu-v6e-16-vm")
+    gcs = os.getenv("GCS_BUCKET")
+    profile_name = os.getenv("MODEL_PROFILE", "sd-pair-7b")
 
-    b64 = base64.b64encode(token.encode()).decode()
-    py = f"""
-import base64
-from pathlib import Path
-token = base64.b64decode("{b64}").decode()
-path = Path.home() / "ssd-tpu-" / ".env"
-lines = path.read_text().splitlines() if path.exists() else []
-for key, val in [
-    ("HF_TOKEN", token),
-    ("TARGET_MODEL_PATH", "./models/google_gemma-2-2b-it"),
-    ("DRAFT_MODEL_PATH", "./models/google_gemma-2b-it"),
-]:
-    replaced = False
-    new_lines = []
-    for line in lines:
-        if line.startswith(key + "="):
-            new_lines.append(f"{{key}}={{val}}")
-            replaced = True
-        else:
-            new_lines.append(line)
-    if not replaced:
-        new_lines.append(f"{{key}}={{val}}")
-    lines = new_lines
-path.parent.mkdir(parents=True, exist_ok=True)
-path.write_text("\\n".join(lines) + "\\n")
-print("HF_TOKEN synced to VM .env")
-"""
-    script_b64 = base64.b64encode(py.encode()).decode()
-    remote = f"echo {script_b64} | base64 -d | python3"
+    profile = get_profile(profile_name)
+    defaults = profile_env_defaults(profile, gcs)
+
+    env_updates: dict[str, str] = {
+        "HF_TOKEN": token,
+        "MODEL_PROFILE": profile.name,
+        "JAX_PLATFORMS": os.getenv("JAX_PLATFORMS", "tpu"),
+        **defaults,
+    }
+    for key in (
+        "GCP_PROJECT",
+        "TPU_ZONE",
+        "TPU_VM_NAME",
+        "TPU_SLICE_CHIPS",
+        "GCS_BUCKET",
+        "GCS_MODEL_PREFIX",
+        "SSD_SHARDING_BACKEND",
+    ):
+        val = os.getenv(key)
+        if val:
+            env_updates[key] = val
+
+    payload_b64 = base64.b64encode(json.dumps(env_updates).encode()).decode()
+    remote = f"echo {payload_b64} | base64 -d | python3 -c \""
+    remote += (
+        "import json,sys,base64; from pathlib import Path; "
+        "data=json.loads(sys.stdin.read()); "
+        "p=Path.home()/'ssd-tpu-'/'.env'; "
+        "lines=p.read_text().splitlines() if p.exists() else []; "
+        "keys=set(); "
+        "out=[]; "
+        "[out.append(f'{k}={data[k]}') or keys.add(k) for k in data if not any(l.startswith(k+'=') for l in lines)]; "
+        "for line in lines: "
+        "  k=line.split('=',1)[0] if '=' in line else ''; "
+        "  out.append(f'{k}={data[k]}' if k in data else line); "
+        "p.parent.mkdir(parents=True, exist_ok=True); "
+        "p.write_text(chr(10).join(out)+chr(10)); "
+        "print('Profile synced:', list(data.keys()))\""
+    )
 
     gcloud = r"C:\Program Files (x86)\Google\Cloud SDK\google-cloud-sdk\bin\gcloud.cmd"
     if not Path(gcloud).exists():
         gcloud = "gcloud"
+
+    # Simpler remote script via heredoc payload
+    py_script = f"""
+import json, base64
+from pathlib import Path
+data = json.loads(base64.b64decode("{payload_b64}").decode())
+path = Path.home() / "ssd-tpu-" / ".env"
+lines = path.read_text().splitlines() if path.exists() else []
+out = []
+seen = set()
+for line in lines:
+    if "=" not in line or line.strip().startswith("#"):
+        out.append(line)
+        continue
+    key = line.split("=", 1)[0]
+    if key in data:
+        out.append(f"{{key}}={{data[key]}}")
+        seen.add(key)
+    else:
+        out.append(line)
+for key, val in data.items():
+    if key not in seen:
+        out.append(f"{{key}}={{val}}")
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text("\\n".join(out) + "\\n")
+print("Synced keys:", ", ".join(sorted(data.keys())))
+"""
+    script_b64 = base64.b64encode(py_script.encode()).decode()
+    remote_cmd = f"echo {script_b64} | base64 -d | python3"
 
     cmd = [
         gcloud,
@@ -80,11 +110,11 @@ print("HF_TOKEN synced to VM .env")
         vm,
         f"--zone={zone}",
         f"--project={project}",
-        f"--command={remote}",
+        f"--command={remote_cmd}",
     ]
-    print(f"Pushing HF_TOKEN to {vm}...")
+    print(f"Pushing profile '{profile.name}' to {vm}...")
     subprocess.run(cmd, check=True, shell=False)
-    print("Done. On VM: python scripts/download_models.py --preset gemma-2b")
+    print("Done. On VM: ./scripts/bootstrap_vm.sh --profile", profile.name)
 
 
 if __name__ == "__main__":

@@ -2,6 +2,7 @@ from connect.mesh_allocator import _make_mesh, allocate_meshes, _split_counts
 
 
 def test_split_counts():
+    assert _split_counts(16) == (14, 2)
     assert _split_counts(8) == (7, 1)
     assert _split_counts(4) == (3, 1)
     assert _split_counts(2) == (1, 1)

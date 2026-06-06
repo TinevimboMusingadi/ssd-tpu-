@@ -1,85 +1,67 @@
 # TPU VM — copy-paste commands
 
-SSH in, then copy **one block at a time** (no extra spaces in flags).
-
 ## Every new SSH session
 
 ```bash
 cd ~/ssd-tpu-
 source .venv/bin/activate
 export JAX_PLATFORMS=tpu
+export SSD_USE_TOY_MODEL=0
 ```
 
-## Pull latest fixes
+## First-time bootstrap (v6e-16)
 
 ```bash
 git pull
-pip install -e . -q
+chmod +x scripts/bootstrap_vm.sh
+./scripts/bootstrap_vm.sh --profile sd-pair-7b
 ```
-
-## Download Gemma (once per VM)
-
-Accept licenses for both models on Hugging Face, set `HF_TOKEN` in `.env`, then:
-
-```bash
-python scripts/download_models.py --preset sd-pair
-```
-
-Target = `google/gemma-2-2b-it` (larger), draft = `google/gemma-2b-it` (smaller).
 
 ## Health check
 
 ```bash
 python -m connect.diagnostics
+python -m connect.diagnostics --smoke-model
 ```
 
-## Tests
+## Real model tests
 
 ```bash
-pytest tests/ -q
+export SSD_USE_REAL_MODEL=1
+pytest tests/test_real_gemma_tpu.py -m tpu -q
 ```
 
-Note: `tests/` not `test/`. Flag is `-q` not `-q` on its own line.
-
-## Benchmark
+## Stream tokens (physics prompt)
 
 ```bash
-python -m jax_ssd.benchmarks.compare_ar_sd_ssd --mode all --num-prompts 3
+python -m jax_ssd.benchmarks.stream_prompt --mode ar \
+  --prompt "Explain Newton's second law" --max-tokens 32
 ```
 
-Note: `jax_ssd` not `jax_sdd`. Use `--mode` not `-- mode` (no space).
-
-## Stream tokens (physics prompt, no TUI)
+## Benchmark all modes
 
 ```bash
-python -m jax_ssd.benchmarks.stream_prompt --mode ar --prompt "Explain Newton second law"
-```
-
-Modes: `ar`, `sd`, `ssd`, `instance`
-
-## Benchmark with custom prompt
-
-```bash
-python -m jax_ssd.benchmarks.compare_ar_sd_ssd --mode ar --prompt "What is quantum entanglement" --num-prompts 1
+python -m jax_ssd.benchmarks.compare_ar_sd_ssd --mode all --num-prompts 2 \
+  --prompt "What is the speed of light"
 ```
 
 ## Live TUI
 
 ```bash
-python -m tui.app --prompt "Explain Newton second law in simple terms"
+python -m tui.app --prompt "Explain quantum entanglement in simple terms"
 ```
 
 Quit with `q`.
 
-## Full recover + install
+## Recover from disk-full / broken venv
 
 ```bash
-chmod +x scripts/recover_tpu_install.sh
-./scripts/recover_tpu_install.sh
+./scripts/recover_tpu_install.sh --profile sd-pair-7b
 ```
 
-## Run everything
+## Windows: provision + push profile
 
-```bash
-bash scripts/vm_commands.sh
+```powershell
+.\scripts\provision_tpu.ps1 -ChipCount 16
+python scripts/push_hf_token.py
 ```

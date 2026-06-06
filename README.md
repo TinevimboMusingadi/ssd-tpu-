@@ -1,118 +1,102 @@
-# SSD on Google TPU
-
-JAX/TPU implementation of **Speculative Speculative Decoding (SSD / Saguaro)** — porting the [CUDA reference](https://github.com/tanishqkumar/ssd) to Google TPUs with Gemma model support, flexible slice connection, and a live terminal UI.
-
-## Algorithms
-
-| Mode | Description |
-|------|-------------|
-| `ar` | Autoregressive target-only baseline |
-| `sd` | Synchronous speculative decoding |
-| `ssd` | Async SSD / Saguaro with speculation cache |
-| `instance` | Instance-SSD: retrieval-based speculation for code refactoring |
-
-## Requirements
-
-Python 3.10–3.12 recommended (JAX TPU wheels). Use a TPU VM for production runs.
-
-## Quick start
-
-```bash
-# Local / CPU smoke test (Windows: use project venv)
-py -m venv .venv
-.\.venv\Scripts\activate        # Linux/macOS: source .venv/bin/activate
-pip install -e ".[dev]"
-python -m connect.diagnostics
-pytest tests/ -q
-
-# TPU VM setup (after git clone + cp .env.example .env)
-sudo apt-get update && sudo apt-get install -y python3-pip python3-venv
-./scripts/setup_tpu_vm.sh          # no PyTorch — saves ~2GB on 10GB boot disk
-source .venv/bin/activate
-
-# If a prior install failed with "No space left on device":
-chmod +x scripts/recover_tpu_install.sh && ./scripts/recover_tpu_install.sh
-```
-
-> **Disk note:** TPU VM boot disks are small (~10GB). Do not `pip install -e ".[parity]"` on the VM — that pulls PyTorch+CUDA. Parity tests skip torch automatically.
-
-Copy `.env.example` to `.env` and set `GCP_PROJECT`, `TPU_ZONE`, and `HF_TOKEN`.
-
-### Download Gemma weights (required for real inference)
-
-1. Accept the [Gemma license](https://huggingface.co/google/gemma-2b-it) on Hugging Face (same account as your token).
-2. Create a **Classic** HF token with **Read** access, or a fine-grained token with **“Access public gated repositories”** enabled ([token settings](https://huggingface.co/settings/tokens)).
-3. Set `HF_TOKEN` in `.env` and push to the VM: `python scripts/push_hf_token.py`
-3. On the TPU VM:
-
-```bash
-python scripts/download_models.py --preset sd-pair
-# or: chmod +x scripts/download_gemma.sh && ./scripts/download_gemma.sh
-```
-
-Default pair for v6e-4 (3 target chips + 1 draft chip):
-
-| Role | Model | Path |
-|------|-------|------|
-| Target (verifier) | Gemma-2.2B-IT | `./models/google_gemma-2-2b-it` |
-| Draft (speculator) | Gemma-2B-IT | `./models/google_gemma-2b-it` |
-
-Tests use the toy model automatically (`SSD_USE_TOY_MODEL=1` in pytest).
-
-### Windows: provision VM + auto-fill SSH in `.env`
-
-```powershell
-# Fix: FLEX_START request-valid-for-duration max is 2h (not 4h)
-.\scripts\provision_tpu.ps1
-
-# SSH into VM (also writes ~/.ssh/config entry "ssd-tpu")
-.\scripts\connect_ssh.ps1
-```
-
-This reads `GCP_PROJECT=tpu-builder1` from `.env`, creates `ssd-tpu-v6e-vm`, and writes `TPU_SSH_HOST` / `TPU_SSH_USER` back automatically.
-
-## TPU connect
-
-```bash
-python -m connect.diagnostics
-# or
-ssd-tpu-doctor
-```
-
-Auto-partitions devices: most chips → target mesh, remainder → draft mesh.
-
-## Benchmarks
-
-```bash
-python -m jax_ssd.benchmarks.compare_ar_sd_ssd --mode all --num-prompts 2
-python -m jax_ssd.benchmarks.stream_prompt --prompt "Explain Newton's second law"
-```
-
-## Live TUI
-
-```bash
-python -m tui.app --prompt "Explain quantum entanglement in simple terms"
-```
-
-Four panels stream **decoded tokens live** as each algorithm generates them.
-
-## Layout
-
-- `connect/` — TPU SSH, probe, mesh allocation
-- `jax_ssd/` — inference engine, algorithms, models, kernels
-- `tui/` — terminal UI with live token streaming
-- `tests/` — parity and unit tests
-- `scripts/` — TPU provisioning and model download
-- `docs/` — architecture and algorithm notes
-
-## Citation
-
-```bibtex
-@misc{kumar2026speculativespeculativedecoding,
-  title={Speculative Speculative Decoding},
-  author={Tanishq Kumar and Tri Dao and Avner May},
-  year={2026},
-  eprint={2603.03251},
-  archivePrefix={arXiv},
-}
-```
+# SSD on Google TPU
+
+JAX/TPU implementation of **Speculative Speculative Decoding (SSD / Saguaro)** — porting the [CUDA reference](https://github.com/tanishqkumar/ssd) to Google TPUs with Gemma model support, flexible slice connection, and a live terminal UI.
+
+## Algorithms
+
+| Mode | Description |
+|------|-------------|
+| `ar` | Autoregressive target-only baseline |
+| `sd` | Synchronous speculative decoding |
+| `ssd` | Async SSD / Saguaro with speculation cache |
+| `instance` | Instance-SSD: retrieval-based speculation for code refactoring |
+
+## Requirements
+
+Python 3.10–3.12 recommended (JAX TPU wheels). Use a TPU VM for production runs.
+
+## TPU Builders workflow (v6e-16 + Gemma 7B/2B + GCS)
+
+### 1. Windows setup
+
+```powershell
+copy .env.example .env
+# Edit: GCP_PROJECT, TPU_ZONE, HF_TOKEN
+
+.\scripts\setup_gcs.ps1
+python scripts/download_models.py --preset sd-pair-7b --gcs-uri gs://YOUR_PROJECT-ssd-tpu/models
+.\scripts\teardown_vm.ps1 -VmName ssd-tpu-v6e-vm          # delete old 4-chip VM
+.\scripts\provision_tpu.ps1 -ChipCount 16 -VmName ssd-tpu-v6e-16-vm
+python scripts/push_hf_token.py
+```
+
+### 2. VM bootstrap (one command)
+
+```bash
+git clone https://github.com/TinevimboMusingadi/ssd-tpu-.git ~/ssd-tpu-
+cd ~/ssd-tpu-
+chmod +x scripts/bootstrap_vm.sh
+./scripts/bootstrap_vm.sh --profile sd-pair-7b
+```
+
+Bootstrap installs JAX TPU + project deps (no PyTorch), syncs models from GCS, runs diagnostics and tests.
+
+### 3. Model pair (v6e-16: 14 target + 2 draft chips)
+
+| Role | Model | Default path |
+|------|-------|--------------|
+| Target (verifier) | Gemma-7B-IT | `gs://.../models/google_gemma-7b-it` |
+| Draft (speculator) | Gemma-2B-IT | `gs://.../models/google_gemma-2b-it` |
+
+Accept licenses for both models on Hugging Face. Use a Classic HF token with Read access.
+
+### 4. Run inference
+
+```bash
+export JAX_PLATFORMS=tpu
+export SSD_USE_TOY_MODEL=0
+python -m connect.diagnostics --smoke-model
+python -m jax_ssd.benchmarks.stream_prompt --prompt "Explain Newton's second law"
+python -m tui.app --prompt "What is quantum entanglement?"
+```
+
+## Local dev (CPU, toy model)
+
+```bash
+pip install -e ".[dev]"
+pytest tests/ -q
+```
+
+Tests use the toy model automatically unless `SSD_USE_REAL_MODEL=1`.
+
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `provision_tpu.ps1` | Create v6e/v5p VM (`-ChipCount 16`) |
+| `teardown_vm.ps1` | Delete old VM |
+| `setup_gcs.ps1` | Create GCS bucket + IAM |
+| `bootstrap_vm.sh` | Master VM install (JAX, deps, GCS sync, tests) |
+| `download_models.py` | HF download + optional GCS upload |
+| `push_hf_token.py` | Sync full profile to VM `.env` |
+
+## Layout
+
+- `connect/` — TPU probe, mesh allocation, GCS, profiles
+- `jax_ssd/` — inference engine, algorithms, sharded Gemma adapters
+- `tui/` — terminal UI with live token streaming
+- `tests/` — unit tests + `test_real_gemma_tpu.py` (TPU only)
+- `scripts/` — provisioning, bootstrap, GCS
+
+## Citation
+
+```bibtex
+@misc{kumar2026speculativespeculativedecoding,
+  title={Speculative Speculative Decoding},
+  author={Tanishq Kumar and Tri Dao and Avner May},
+  year={2026},
+  eprint={2603.03251},
+  archivePrefix={arXiv},
+}
+```
+
