@@ -28,6 +28,8 @@ tpu = [
 ]
 dev = [
     "pytest>=8.0.0",
+]
+parity = [
     "torch>=2.2.0",
 ]
 maxtext = [

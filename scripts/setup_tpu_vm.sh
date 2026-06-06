@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Install JAX TPU support and project deps on a TPU VM.
+# Does NOT install PyTorch (saves ~2GB disk). Use .[parity] locally for JAX/torch parity tests.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -26,8 +27,13 @@ fi
 # shellcheck disable=SC1091
 source .venv/bin/activate
 
+echo "Freeing pip cache before install..."
+$PIP cache purge 2>/dev/null || true
+
 $PIP install -U pip
 $PIP install -U "jax[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+# Core + pytest only — no torch/CUDA (TPU VM boot disk is ~10GB)
+$PIP install -e .
 $PIP install -e ".[dev]"
 
 export JAX_PLATFORMS=tpu

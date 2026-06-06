@@ -27,9 +27,14 @@ pytest tests/ -q
 
 # TPU VM setup (after git clone + cp .env.example .env)
 sudo apt-get update && sudo apt-get install -y python3-pip python3-venv
-./scripts/setup_tpu_vm.sh
+./scripts/setup_tpu_vm.sh          # no PyTorch — saves ~2GB on 10GB boot disk
 source .venv/bin/activate
+
+# If a prior install failed with "No space left on device":
+chmod +x scripts/recover_tpu_install.sh && ./scripts/recover_tpu_install.sh
 ```
+
+> **Disk note:** TPU VM boot disks are small (~10GB). Do not `pip install -e ".[parity]"` on the VM — that pulls PyTorch+CUDA. Parity tests skip torch automatically.
 
 Copy `.env.example` to `.env` and set `GCP_PROJECT` and `TPU_ZONE`.
 
