@@ -1,0 +1,14 @@
+context_files/*
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.pytest_cache/
+.mypy_cache/
+dist/
+build/
+data/
+*.log
+.DS_Store
