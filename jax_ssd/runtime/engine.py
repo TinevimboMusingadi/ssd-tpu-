@@ -8,7 +8,7 @@ from typing import Iterator
 
 import jax.numpy as jnp
 
-from connect.mesh_allocator import allocate_meshes
+from connect.mesh_allocator import allocate_meshes, mesh_policy_from_env
 from jax_ssd.algorithm.async_protocol import DraftCommand, DraftRequest, VerifyOutcome
 from jax_ssd.algorithm.instance_prior import (
     find_high_salience_spans,
@@ -35,8 +35,14 @@ class LLMEngine:
         if config.mesh_allocation is None:
             from dataclasses import replace
 
-            config = replace(config, mesh_allocation=allocate_meshes())
+            policy = mesh_policy_from_env()
+            if config.tpu_role == "target":
+                policy = "all_target"
+            elif config.tpu_role == "draft":
+                policy = "all_draft"
+            config = replace(config, mesh_allocation=allocate_meshes(policy=policy))
         self.config = config
+        role = config.tpu_role
         self.page_manager = PageManager(
             block_size=config.block_size,
             num_blocks=config.num_blocks,
@@ -50,25 +56,40 @@ class LLMEngine:
             and config.target_model_path == config.draft_model_path
         ):
             share_key = f"shared:{config.target_model_path}"
-        self.target = load_model_adapter(
-            config.target_model_path,
-            use_toy=config.use_toy_model,
-            share_key=share_key,
-            mesh=alloc.target_mesh if alloc else None,
-            devices=alloc.target_devices if alloc else None,
-            role="target",
-        )
-        self.draft = load_model_adapter(
-            config.draft_model_path,
-            use_toy=config.use_toy_model,
-            seed=1,
-            share_key=share_key,
-            mesh=alloc.draft_mesh if alloc else None,
-            devices=alloc.draft_devices if alloc else None,
-            role="draft",
-        )
+        load_target = role in ("both", "target")
+        load_draft = role in ("both", "draft")
+
+        if load_target:
+            self.target = load_model_adapter(
+                config.target_model_path,
+                use_toy=config.use_toy_model,
+                share_key=share_key,
+                mesh=alloc.target_mesh if alloc else None,
+                devices=alloc.target_devices if alloc else None,
+                role="target",
+            )
+        else:
+            from jax_ssd.models.toy_model import ToyModelAdapter
+
+            self.target = ToyModelAdapter(seed=99)
+
+        if load_draft:
+            self.draft = load_model_adapter(
+                config.draft_model_path,
+                use_toy=config.use_toy_model,
+                seed=1,
+                share_key=share_key,
+                mesh=alloc.draft_mesh if alloc else None,
+                devices=alloc.draft_devices if alloc else None,
+                role="draft",
+            )
+        else:
+            from jax_ssd.models.toy_model import ToyModelAdapter
+
+            self.draft = ToyModelAdapter(seed=1)
+
         self.draft_worker: DraftWorker | None = None
-        if config.mode in (DecodeMode.SSD, DecodeMode.INSTANCE):
+        if load_draft and config.mode in (DecodeMode.SSD, DecodeMode.INSTANCE):
             self.draft_worker = DraftWorker(config, self.draft)
             self.draft_worker.start()
 

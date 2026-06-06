@@ -28,6 +28,8 @@ fi
 
 export JAX_PLATFORMS="${JAX_PLATFORMS:-tpu}"
 export MODEL_PROFILE="${MODEL_PROFILE:-$PROFILE}"
+export SSD_TPU_ROLE="${SSD_TPU_ROLE:-both}"
+echo "TPU role: $SSD_TPU_ROLE"
 
 echo "=== SSD-TPU Bootstrap ==="
 echo "Profile: $MODEL_PROFILE"

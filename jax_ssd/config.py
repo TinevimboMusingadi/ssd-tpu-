@@ -22,6 +22,10 @@ def _default_draft_path() -> str | None:
     return os.getenv("DRAFT_MODEL_PATH")
 
 
+def _default_tpu_role() -> str:
+    return os.getenv("SSD_TPU_ROLE", "both").lower()
+
+
 class DecodeMode(str, Enum):
     AR = "ar"
     SD = "sd"
@@ -42,6 +46,7 @@ class SSDConfig:
     target_model_path: str | None = field(default_factory=_default_target_path)
     draft_model_path: str | None = field(default_factory=_default_draft_path)
     use_toy_model: bool = field(default_factory=lambda: _env_bool("SSD_USE_TOY_MODEL"))
+    tpu_role: str = field(default_factory=_default_tpu_role)
     mesh_allocation: MeshAllocation | None = None
     instance_context_ratio: float = 0.3
 

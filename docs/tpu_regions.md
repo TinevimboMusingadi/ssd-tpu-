@@ -50,7 +50,34 @@ The Builders table **"Max Slice Size 8x16"** means **pod multislice** (up to 128
 .\scripts\provision_tpu.ps1 -Family v5p -ChipCount 4 -Zone us-east5-a
 ```
 
-## Need more than 8 chips?
+## Dual 8+8 VMs (16 chips total)
+
+When one 8-chip VM is tight for Gemma 7B, use **two** `ct6e-standard-8t` VMs:
+
+| VM | Chips | Role | Env |
+|----|-------|------|-----|
+| `ssd-tpu-target-8-vm` | 8 | Gemma 7B sharded across all 8 | `SSD_TPU_ROLE=target` |
+| `ssd-tpu-draft-8-vm` | 8 | Gemma 2B draft | `SSD_TPU_ROLE=draft` |
+
+```powershell
+.\scripts\provision_dual_8.ps1 -Zone us-east5-b
+```
+
+On each VM after bootstrap:
+
+```bash
+# Target VM only
+export SSD_TPU_ROLE=target
+python -m jax_ssd.benchmarks.stream_prompt --mode ar --prompt "Hello"
+
+# Draft VM only (smoke)
+export SSD_TPU_ROLE=draft
+python -m connect.diagnostics --smoke-model
+```
+
+Cross-VM SD/SSD (target on one VM, draft on another) is a future step; **AR on target VM** works today.
+
+## Need more than 8 chips per VM?
 
 1. Email **tpu-builders-support@google.com** (chips, duration, use case).
 2. Consider **v5p multislice** (advanced; not yet wired in SSD-TPU scripts).

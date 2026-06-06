@@ -29,7 +29,14 @@ PROFILES: dict[str, ModelProfile] = {
         target_repo="google/gemma-7b-it",
         draft_repo="google/gemma-2b-it",
         min_chips=8,
-        description="Gemma-7B target + Gemma-2B draft (v6e-8: 7+1 split)",
+        description="Gemma-7B + Gemma-2B on one v6e-8 VM (7+1 chip split)",
+    ),
+    "sd-pair-7b-dual8": ModelProfile(
+        name="sd-pair-7b-dual8",
+        target_repo="google/gemma-7b-it",
+        draft_repo="google/gemma-2b-it",
+        min_chips=8,
+        description="Two v6e-8 VMs: 8 chips target + 8 chips draft (16 total)",
     ),
     "sd-pair-2b": ModelProfile(
         name="sd-pair-2b",

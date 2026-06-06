@@ -90,7 +90,20 @@ Bootstrap installs JAX TPU + project deps (no PyTorch), syncs models from GCS, r
 
 
 
-### 3. Model pair (v6e-8: 7 target + 1 draft chips)
+### 3a. Single VM (7 target + 1 draft on one v6e-8)
+
+### 3b. Dual VM (8+8 chips — best fit for Gemma 7B)
+
+```powershell
+.\scripts\provision_dual_8.ps1 -Zone us-east5-b
+```
+
+| VM | `SSD_TPU_ROLE` | Model |
+|----|----------------|-------|
+| `ssd-tpu-target-8-vm` | `target` | Gemma 7B on all 8 chips |
+| `ssd-tpu-draft-8-vm` | `draft` | Gemma 2B |
+
+### 3c. Model pair (single VM: 7 target + 1 draft)
 
 
 

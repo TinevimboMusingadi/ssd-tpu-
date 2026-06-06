@@ -26,6 +26,10 @@ class ConnectConfig:
     draft_model_path: str | None
     sharding_backend: str
     use_toy_model: bool
+    tpu_topology: str
+    tpu_role: str
+    target_vm_name: str | None
+    draft_vm_name: str | None
 
     @classmethod
     def from_env(cls, env_path: str | Path | None = None) -> ConnectConfig:
@@ -51,6 +55,10 @@ class ConnectConfig:
             draft_model_path=os.getenv("DRAFT_MODEL_PATH"),
             sharding_backend=os.getenv("SSD_SHARDING_BACKEND", "flax"),
             use_toy_model=os.getenv("SSD_USE_TOY_MODEL", "0").lower() in ("1", "true", "yes"),
+            tpu_topology=os.getenv("TPU_TOPOLOGY", "single"),
+            tpu_role=os.getenv("SSD_TPU_ROLE", "both"),
+            target_vm_name=os.getenv("TARGET_VM_NAME"),
+            draft_vm_name=os.getenv("DRAFT_VM_NAME"),
         )
 
     def apply_jax_platforms(self) -> None:

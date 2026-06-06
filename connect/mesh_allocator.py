@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Literal
 
@@ -10,6 +11,17 @@ import numpy as np
 from jax.sharding import Mesh
 
 from connect.slice_probe import DeviceTopology, probe_devices
+
+
+def mesh_policy_from_env() -> Literal["auto", "all_target", "all_draft"]:
+    """Resolve mesh policy from SSD_TPU_ROLE / TPU_TOPOLOGY env."""
+    role = os.getenv("SSD_TPU_ROLE", "both").lower()
+    topo = os.getenv("TPU_TOPOLOGY", "single").lower()
+    if role == "target" or topo == "dual8-target":
+        return "all_target"
+    if role == "draft" or topo == "dual8-draft":
+        return "all_draft"
+    return "auto"
 
 
 @dataclass(frozen=True)
@@ -50,9 +62,11 @@ def _split_counts(n: int) -> tuple[int, int]:
 
 
 def allocate_meshes(
-    policy: Literal["auto", "all_target"] = "auto",
+    policy: Literal["auto", "all_target", "all_draft"] | None = None,
     topology: DeviceTopology | None = None,
 ) -> MeshAllocation:
+    if policy is None:
+        policy = mesh_policy_from_env()
     topology = topology or probe_devices()
     devices = tuple(jax.devices())
     n = len(devices)
@@ -61,7 +75,11 @@ def allocate_meshes(
     if policy == "all_target":
         target_devs = devices
         draft_devs: tuple[jax.Device, ...] = ()
-        warnings.append("all_target policy: async SSD unavailable without draft devices.")
+        warnings.append("all_target: all chips for target model (dual8 target VM).")
+    elif policy == "all_draft":
+        target_devs = ()
+        draft_devs = devices
+        warnings.append("all_draft: all chips for draft model (dual8 draft VM).")
     else:
         t_count, d_count = _split_counts(n)
         target_devs = devices[:t_count]
@@ -93,7 +111,9 @@ def _make_mesh(devices: tuple[jax.Device, ...], name: str) -> Mesh:
         return Mesh(np.array(devices).reshape(1, 2), axis_names=("data", "model"))
     if n == 4:
         return Mesh(np.array(devices).reshape(2, 2), axis_names=("data", "model"))
-    # 3, 5, 6, 7, ... — use one axis (e.g. v6e-4 split 3+1)
+    if n == 8:
+        return Mesh(np.array(devices).reshape(2, 4), axis_names=("data", "model"))
+    # 3, 5, 6, 7, 14, ... — use one axis
     return Mesh(devices, axis_names=("devices",))
 
 

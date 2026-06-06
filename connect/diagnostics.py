@@ -52,6 +52,8 @@ def run_diagnostics(*, smoke_model: bool = False) -> int:
             f"got {topo.device_count}"
         )
 
+    if config.tpu_role != "both":
+        print(f"TPU role: {config.tpu_role} (topology={config.tpu_topology})")
     alloc = connector.allocate_meshes()
     print(f"Mesh allocation: {alloc.summary()}")
     for w in alloc.warnings:
