@@ -1,0 +1,16 @@
+# Google Cloud / TPU
+GCP_PROJECT=your-project-id
+TPU_ZONE=us-east5-a
+TPU_SSH_HOST=
+TPU_SSH_USER=
+JAX_PLATFORMS=tpu
+
+# Model paths (local or gs://)
+TARGET_MODEL_PATH=./models/gemma-7b
+DRAFT_MODEL_PATH=./models/gemma-2b
+DATASET_CACHE=./data
+
+# SSD algorithm defaults
+SSD_K=4
+SSD_FANOUT=2,2,2,2,2
+SSD_SAMPLER_X=0.5
