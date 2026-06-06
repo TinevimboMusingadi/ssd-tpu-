@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ssd-tpu"
+version = "0.1.0"
+description = "Speculative Speculative Decoding on Google TPUs with JAX"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "jax>=0.4.28",
+    "flax>=0.8.0",
+    "numpy>=1.26.0",
+    "orbax-checkpoint>=0.6.0",
+    "transformers>=4.40.0",
+    "huggingface-hub>=0.23.0",
+    "rich>=13.7.0",
+    "textual>=0.58.0",
+    "python-dotenv>=1.0.0",
+    "einops>=0.8.0",
+]
+
+[project.optional-dependencies]
+tpu = [
+    "jax[tpu]>=0.4.28",
+]
+dev = [
+    "pytest>=8.0.0",
+    "torch>=2.2.0",
+]
+maxtext = [
+    "google-cloud-storage>=2.16.0",
+]
+
+[project.scripts]
+ssd-tpu-doctor = "connect.diagnostics:main"
+ssd-tpu-bench = "jax_ssd.benchmarks.compare_ar_sd_ssd:main"
+ssd-tpu-tui = "tui.app:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["connect", "jax_ssd", "tui"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
