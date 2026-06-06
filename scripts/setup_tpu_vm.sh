@@ -39,7 +39,7 @@ $PIP install -e ".[dev]"
 export JAX_PLATFORMS=tpu
 python -m connect.diagnostics
 
-if [ ! -d "./models/google_gemma-2b-it" ] && [ "${DOWNLOAD_MODELS:-0}" = "1" ]; then
-  echo "Downloading Gemma-2B-IT weights (set HF_TOKEN in .env)..."
-  python scripts/download_models.py --preset gemma-2b
+if [ ! -d "./models/google_gemma-2-2b-it" ] && [ "${DOWNLOAD_MODELS:-0}" = "1" ]; then
+  echo "Downloading Gemma SD pair (set HF_TOKEN in .env)..."
+  python scripts/download_models.py --preset sd-pair
 fi

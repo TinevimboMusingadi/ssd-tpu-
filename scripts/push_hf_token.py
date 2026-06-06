@@ -48,7 +48,7 @@ path = Path.home() / "ssd-tpu-" / ".env"
 lines = path.read_text().splitlines() if path.exists() else []
 for key, val in [
     ("HF_TOKEN", token),
-    ("TARGET_MODEL_PATH", "./models/google_gemma-2b-it"),
+    ("TARGET_MODEL_PATH", "./models/google_gemma-2-2b-it"),
     ("DRAFT_MODEL_PATH", "./models/google_gemma-2b-it"),
 ]:
     replaced = False

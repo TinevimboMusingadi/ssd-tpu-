@@ -46,11 +46,18 @@ Copy `.env.example` to `.env` and set `GCP_PROJECT`, `TPU_ZONE`, and `HF_TOKEN`.
 3. On the TPU VM:
 
 ```bash
-python scripts/download_models.py --preset gemma-2b
+python scripts/download_models.py --preset sd-pair
 # or: chmod +x scripts/download_gemma.sh && ./scripts/download_gemma.sh
 ```
 
-Default path: `./models/google_gemma-2b-it` (fits a v6e-4 slice). Tests use the toy model automatically (`SSD_USE_TOY_MODEL=1` in pytest).
+Default pair for v6e-4 (3 target chips + 1 draft chip):
+
+| Role | Model | Path |
+|------|-------|------|
+| Target (verifier) | Gemma-2.2B-IT | `./models/google_gemma-2-2b-it` |
+| Draft (speculator) | Gemma-2B-IT | `./models/google_gemma-2b-it` |
+
+Tests use the toy model automatically (`SSD_USE_TOY_MODEL=1` in pytest).
 
 ### Windows: provision VM + auto-fill SSH in `.env`
 

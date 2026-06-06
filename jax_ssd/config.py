@@ -15,11 +15,11 @@ def _env_bool(key: str, default: bool = False) -> bool:
 
 
 def _default_target_path() -> str | None:
-    return os.getenv("TARGET_MODEL_PATH", "./models/google_gemma-2b-it")
+    return os.getenv("TARGET_MODEL_PATH", "./models/google_gemma-2-2b-it")
 
 
 def _default_draft_path() -> str | None:
-    return os.getenv("DRAFT_MODEL_PATH") or _default_target_path()
+    return os.getenv("DRAFT_MODEL_PATH", "./models/google_gemma-2b-it")
 
 
 class DecodeMode(str, Enum):

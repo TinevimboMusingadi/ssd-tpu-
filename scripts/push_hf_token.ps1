@@ -25,7 +25,7 @@ if (-not $token.StartsWith("hf_")) {
 
 $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($token))
 $remote = @'
-cd ~/ssd-tpu- && TOKEN=$(echo __B64__ | base64 -d) && touch .env && if grep -q '^HF_TOKEN=' .env; then sed -i "s|^HF_TOKEN=.*|HF_TOKEN=$TOKEN|" .env; else echo "HF_TOKEN=$TOKEN" >> .env; fi && grep -q '^TARGET_MODEL_PATH=' .env || echo 'TARGET_MODEL_PATH=./models/google_gemma-2b-it' >> .env && grep -q '^DRAFT_MODEL_PATH=' .env || echo 'DRAFT_MODEL_PATH=./models/google_gemma-2b-it' >> .env && echo HF_TOKEN synced
+cd ~/ssd-tpu- && TOKEN=$(echo __B64__ | base64 -d) && touch .env && if grep -q '^HF_TOKEN=' .env; then sed -i "s|^HF_TOKEN=.*|HF_TOKEN=$TOKEN|" .env; else echo "HF_TOKEN=$TOKEN" >> .env; fi && grep -q '^TARGET_MODEL_PATH=' .env || echo 'TARGET_MODEL_PATH=./models/google_gemma-2-2b-it' >> .env && grep -q '^DRAFT_MODEL_PATH=' .env || echo 'DRAFT_MODEL_PATH=./models/google_gemma-2b-it' >> .env && echo HF_TOKEN synced
 '@
 $remote = $remote.Replace('__B64__', $b64)
 

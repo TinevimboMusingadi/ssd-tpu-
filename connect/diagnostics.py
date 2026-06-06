@@ -35,14 +35,18 @@ def run_diagnostics() -> int:
     for w in alloc.warnings:
         print(f"  warning: {w}")
 
-    target_path = os.getenv("TARGET_MODEL_PATH", "./models/google_gemma-2b-it")
-    if Path(target_path).exists():
-        print(f"Model weights: {target_path} (OK)")
-    elif os.getenv("SSD_USE_TOY_MODEL", "0").lower() in ("1", "true", "yes"):
+    target_path = os.getenv("TARGET_MODEL_PATH", "./models/google_gemma-2-2b-it")
+    draft_path = os.getenv("DRAFT_MODEL_PATH", "./models/google_gemma-2b-it")
+    if os.getenv("SSD_USE_TOY_MODEL", "0").lower() in ("1", "true", "yes"):
         print("Model weights: toy mode (SSD_USE_TOY_MODEL=1)")
     else:
-        print(f"Model weights: MISSING at {target_path}")
-        print("  Run: python scripts/download_models.py --preset gemma-2b")
+        for label, path in (("target", target_path), ("draft", draft_path)):
+            if Path(path).exists():
+                print(f"Model {label}: {path} (OK)")
+            else:
+                print(f"Model {label}: MISSING at {path}")
+        if not Path(target_path).exists() or not Path(draft_path).exists():
+            print("  Run: python scripts/download_models.py --preset sd-pair")
 
     try:
         import jax

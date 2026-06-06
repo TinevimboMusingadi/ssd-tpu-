@@ -14,11 +14,11 @@ logger = logging.getLogger(__name__)
 
 
 def default_target_path() -> str:
-    return os.getenv("TARGET_MODEL_PATH", "./models/google_gemma-2b-it")
+    return os.getenv("TARGET_MODEL_PATH", "./models/google_gemma-2-2b-it")
 
 
 def default_draft_path() -> str:
-    return os.getenv("DRAFT_MODEL_PATH", default_target_path())
+    return os.getenv("DRAFT_MODEL_PATH", "./models/google_gemma-2b-it")
 
 
 def load_model_adapter(

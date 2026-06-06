@@ -19,11 +19,13 @@ pip install -e . -q
 
 ## Download Gemma (once per VM)
 
-Accept license at https://huggingface.co/google/gemma-2b-it, set `HF_TOKEN` in `.env`, then:
+Accept licenses for both models on Hugging Face, set `HF_TOKEN` in `.env`, then:
 
 ```bash
-python scripts/download_models.py --preset gemma-2b
+python scripts/download_models.py --preset sd-pair
 ```
+
+Target = `google/gemma-2-2b-it` (larger), draft = `google/gemma-2b-it` (smaller).
 
 ## Health check
 

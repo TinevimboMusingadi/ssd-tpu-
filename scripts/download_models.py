@@ -16,46 +16,24 @@ PRESETS: dict[str, str] = {
     "gemma-7b": "google/gemma-7b-it",
 }
 
+# Default speculative-decoding pair for v6e-4: larger target + smaller draft
+SD_PAIR = ("google/gemma-2-2b-it", "google/gemma-2b-it")
 
-def main() -> None:
-    load_dotenv()
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--repo", help="HF repo id, e.g. google/gemma-2b-it")
-    parser.add_argument(
-        "--preset",
-        choices=sorted(PRESETS),
-        help="Shortcut for common Gemma checkpoints",
-    )
-    parser.add_argument("--output", default="./models")
-    args = parser.parse_args()
-
-    repo = args.repo or (PRESETS[args.preset] if args.preset else None)
-    if not repo:
-        parser.error("Provide --repo or --preset")
-
+def _download_one(repo: str, output: Path, token: str) -> Path:
     from huggingface_hub import snapshot_download
 
-    token = os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
-    out = Path(args.output) / repo.replace("/", "_")
+    out = output / repo.replace("/", "_")
     out.mkdir(parents=True, exist_ok=True)
-
     print(f"Downloading {repo} -> {out}")
-    if not token:
-        print("ERROR: HF_TOKEN not set.")
-        print("1. Accept license: https://huggingface.co/google/gemma-2b-it")
-        print("2. Create token: https://huggingface.co/settings/tokens")
-        print("3. Add to ~/ssd-tpu-/.env:  HF_TOKEN=hf_...")
-        print("   Or run from Windows: .\\scripts\\push_hf_token.ps1")
-        sys.exit(1)
-
-    print("HF_TOKEN found — starting download...")
 
     try:
-        path = snapshot_download(
-            repo_id=repo,
-            local_dir=str(out),
-            token=token,
+        return Path(
+            snapshot_download(
+                repo_id=repo,
+                local_dir=str(out),
+                token=token,
+            )
         )
     except Exception as exc:
         msg = str(exc)
@@ -69,11 +47,50 @@ def main() -> None:
             print("     https://huggingface.co/settings/tokens")
             print("  3. Update HF_TOKEN in .env, then re-run:")
             print("     python scripts/push_hf_token.py   # from Windows")
-            print("     python scripts/download_models.py --preset gemma-2b")
+            print("     python scripts/download_models.py --preset sd-pair")
         sys.exit(1)
 
+
+def main() -> None:
+    load_dotenv()
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--repo", help="HF repo id, e.g. google/gemma-2b-it")
+    parser.add_argument(
+        "--preset",
+        choices=sorted(PRESETS) + ["sd-pair"],
+        help="Shortcut: sd-pair = Gemma-2.2B target + Gemma-2B draft (v6e-4)",
+    )
+    parser.add_argument("--output", default="./models")
+    args = parser.parse_args()
+
+    token = os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
+    if not token:
+        print("ERROR: HF_TOKEN not set.")
+        print("1. Accept Gemma licenses on huggingface.co (both target and draft repos)")
+        print("2. Create token: https://huggingface.co/settings/tokens")
+        print("3. Add HF_TOKEN to .env, then: python scripts/push_hf_token.py")
+        sys.exit(1)
+
+    print("HF_TOKEN found — starting download...")
+    output = Path(args.output)
+
+    if args.preset == "sd-pair":
+        target_repo, draft_repo = SD_PAIR
+        target_path = _download_one(target_repo, output, token)
+        draft_path = _download_one(draft_repo, output, token)
+        print()
+        print("SD pair ready. Set in .env:")
+        print(f"  TARGET_MODEL_PATH={target_path}")
+        print(f"  DRAFT_MODEL_PATH={draft_path}")
+        return
+
+    repo = args.repo or (PRESETS[args.preset] if args.preset else None)
+    if not repo:
+        parser.error("Provide --repo or --preset")
+
+    path = _download_one(repo, output, token)
     print(f"Downloaded to {path}")
-    print(f"Set in .env: TARGET_MODEL_PATH={out}")
 
 
 if __name__ == "__main__":
