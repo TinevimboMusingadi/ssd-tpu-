@@ -19,7 +19,7 @@ from jax_ssd.algorithm.instance_prior import (
 from jax_ssd.algorithm.spec_cache import SpecCache
 from jax_ssd.algorithm.verify import verify_greedy
 from jax_ssd.config import DecodeMode, SSDConfig
-from jax_ssd.models.toy_model import ToyModelAdapter
+from jax_ssd.models.base import DecodeModelAdapter
 from jax_ssd.runtime.metrics import StepMetrics
 
 
@@ -32,8 +32,10 @@ class WorkerConfig:
 class DraftWorker:
     """Draft speculator: serves cache hits, rebuilds tree cache."""
 
-    def __init__(self, config: SSDConfig, draft_model: ToyModelAdapter | None = None) -> None:
+    def __init__(self, config: SSDConfig, draft_model: DecodeModelAdapter | None = None) -> None:
         self.config = config
+        from jax_ssd.models.toy_model import ToyModelAdapter
+
         self.model = draft_model or ToyModelAdapter()
         self.request_queue: queue.Queue = queue.Queue()
         self.response_queue: queue.Queue = queue.Queue()

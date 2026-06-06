@@ -36,7 +36,20 @@ chmod +x scripts/recover_tpu_install.sh && ./scripts/recover_tpu_install.sh
 
 > **Disk note:** TPU VM boot disks are small (~10GB). Do not `pip install -e ".[parity]"` on the VM — that pulls PyTorch+CUDA. Parity tests skip torch automatically.
 
-Copy `.env.example` to `.env` and set `GCP_PROJECT` and `TPU_ZONE`.
+Copy `.env.example` to `.env` and set `GCP_PROJECT`, `TPU_ZONE`, and `HF_TOKEN`.
+
+### Download Gemma weights (required for real inference)
+
+1. Accept the [Gemma license](https://huggingface.co/google/gemma-2b-it) on Hugging Face.
+2. Create an HF token and set `HF_TOKEN` in `.env`.
+3. On the TPU VM:
+
+```bash
+python scripts/download_models.py --preset gemma-2b
+# or: chmod +x scripts/download_gemma.sh && ./scripts/download_gemma.sh
+```
+
+Default path: `./models/google_gemma-2b-it` (fits a v6e-4 slice). Tests use the toy model automatically (`SSD_USE_TOY_MODEL=1` in pytest).
 
 ### Windows: provision VM + auto-fill SSH in `.env`
 
@@ -63,13 +76,14 @@ Auto-partitions devices: most chips → target mesh, remainder → draft mesh.
 ## Benchmarks
 
 ```bash
-python -m jax_ssd.benchmarks.compare_ar_sd_ssd --mode all --num-prompts 10
+python -m jax_ssd.benchmarks.compare_ar_sd_ssd --mode all --num-prompts 2
+python -m jax_ssd.benchmarks.stream_prompt --prompt "Explain Newton's second law"
 ```
 
 ## Live TUI
 
 ```bash
-python -m tui.app --prompt "Refactor getUserById to fetchUserById"
+python -m tui.app --prompt "Explain quantum entanglement in simple terms"
 ```
 
 Four panels stream **decoded tokens live** as each algorithm generates them.

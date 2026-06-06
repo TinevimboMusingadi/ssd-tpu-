@@ -97,3 +97,9 @@ class ToyModelAdapter:
 
     def decode_tokens_to_str(self, token_ids: list[int]) -> str:
         return " ".join(f"t{tid}" for tid in token_ids)
+
+    def commit_tokens(self, token_ids: list[int]) -> None:
+        return
+
+    def tokenize(self, text: str) -> list[int]:
+        return [ord(c) % self.vocab_size for c in text]

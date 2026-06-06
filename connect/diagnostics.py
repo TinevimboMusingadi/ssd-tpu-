@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import sys
+from pathlib import Path
 
 from connect.config import ConnectConfig
 from connect.mesh_allocator import TPUConnector
@@ -32,6 +34,15 @@ def run_diagnostics() -> int:
     print(f"Mesh allocation: {alloc.summary()}")
     for w in alloc.warnings:
         print(f"  warning: {w}")
+
+    target_path = os.getenv("TARGET_MODEL_PATH", "./models/google_gemma-2b-it")
+    if Path(target_path).exists():
+        print(f"Model weights: {target_path} (OK)")
+    elif os.getenv("SSD_USE_TOY_MODEL", "0").lower() in ("1", "true", "yes"):
+        print("Model weights: toy mode (SSD_USE_TOY_MODEL=1)")
+    else:
+        print(f"Model weights: MISSING at {target_path}")
+        print("  Run: python scripts/download_models.py --preset gemma-2b")
 
     try:
         import jax

@@ -17,12 +17,12 @@ DEFAULT_PROMPTS = [
 ]
 
 
-def load_prompts(num: int) -> list[list[int]]:
+def load_prompts(num: int) -> list[str]:
     prompts = DEFAULT_PROMPTS * ((num // len(DEFAULT_PROMPTS)) + 1)
-    return [[ord(c) % 64 for c in p] for p in prompts[:num]]
+    return prompts[:num]
 
 
-def run_mode(mode: str, prompts: list[list[int]], max_tokens: int) -> dict:
+def run_mode(mode: str, prompts: list[str], max_tokens: int) -> dict:
     llm = LLM.from_mode(mode)
     sampling = SamplingParams(max_new_tokens=max_tokens)
     outputs, metrics = llm.generate(prompts, sampling)
@@ -44,7 +44,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.prompt:
-        prompts = [[ord(c) % 64 for c in args.prompt]]
+        prompts = [args.prompt]
         if args.num_prompts > 1:
             prompts = prompts * args.num_prompts
     else:

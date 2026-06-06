@@ -50,6 +50,9 @@ class LLM:
         return self._engine.generate_stream(prompt, sampling, on_token=on_token)
 
     def _tokenize(self, text: str) -> list[int]:
+        tokenize = getattr(self._engine.target, "tokenize", None)
+        if tokenize is not None:
+            return tokenize(text)
         return [ord(c) % 64 for c in text[:128]]
 
     def shutdown(self) -> None:

@@ -1,59 +1,79 @@
-"""Gemma model adapter for TPU inference."""
+"""Gemma model adapter — Flax causal LM on TPU."""
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
 
+import jax
 import jax.numpy as jnp
 
 from jax_ssd.kernels.kv_cache import KVCacheState
 from jax_ssd.models.base import DecodeResult, PrefillResult, VerifyResultModel
-from jax_ssd.models.toy_model import ToyModelAdapter
 
 logger = logging.getLogger(__name__)
 
+_SHARED: dict[str, tuple[object, object]] = {}
+
 
 class GemmaAdapter:
-    """Gemma adapter — uses real Gemma weights when available, toy fallback otherwise."""
+    """Real Gemma inference via HuggingFace Flax weights."""
 
     def __init__(
         self,
-        model_path: str | None = None,
+        model_path: str,
         vocab_size: int = 256_000,
-        use_toy_fallback: bool = True,
+        share_key: str | None = None,
     ) -> None:
+        if not Path(model_path).exists():
+            raise FileNotFoundError(model_path)
+
+        from transformers import AutoTokenizer, FlaxAutoModelForCausalLM
+
         self.model_path = model_path
-        self.vocab_size = vocab_size
-        self._toy: ToyModelAdapter | None = None
-        self._tokenizer = None
-        self._loaded = False
+        self._tokenizer = AutoTokenizer.from_pretrained(model_path)
+        key = share_key or model_path
+        if key in _SHARED:
+            self.model, self.params = _SHARED[key]
+            logger.info("Reusing loaded Gemma weights for %s", model_path)
+        else:
+            logger.info("Loading Gemma from %s (this may take a minute)...", model_path)
+            self.model = FlaxAutoModelForCausalLM.from_pretrained(
+                model_path,
+                dtype=jnp.bfloat16,
+            )
+            self.params = self.model.params
+            _SHARED[key] = (self.model, self.params)
 
-        if model_path and Path(model_path).exists():
-            self._try_load_gemma(model_path)
-        elif use_toy_fallback:
-            logger.warning("Gemma weights not found at %s; using toy model.", model_path)
-            self._toy = ToyModelAdapter(vocab_size=min(vocab_size, 512))
+        self.vocab_size = int(getattr(self.model.config, "vocab_size", vocab_size))
+        self._past_key_values: tuple | None = None
+        self._dummy_kv = KVCacheState.allocate(
+            num_layers=1, num_blocks=1, block_size=1, num_kv_heads=1, head_dim=1
+        )
 
-    def _try_load_gemma(self, path: str) -> None:
-        try:
-            from transformers import AutoTokenizer
-
-            self._tokenizer = AutoTokenizer.from_pretrained(path)
-            self._loaded = True
-            logger.info("Loaded Gemma tokenizer from %s", path)
-        except Exception as exc:
-            logger.warning("Failed to load Gemma from %s: %s", path, exc)
-            self._toy = ToyModelAdapter(vocab_size=512)
-
-    @property
-    def backend(self) -> ToyModelAdapter:
-        if self._toy is None:
-            self._toy = ToyModelAdapter(vocab_size=512)
-        return self._toy
+    def reset_cache(self) -> None:
+        self._past_key_values = None
 
     def allocate_kv(self) -> KVCacheState:
-        return self.backend.allocate_kv()
+        self.reset_cache()
+        return self._dummy_kv
+
+    def _forward(
+        self,
+        input_ids: jax.Array,
+        *,
+        past_key_values: tuple | None = None,
+        update_cache: bool = False,
+    ) -> jax.Array:
+        outputs = self.model(
+            input_ids=input_ids,
+            past_key_values=past_key_values,
+            params=self.params,
+            train=False,
+        )
+        if update_cache:
+            self._past_key_values = outputs.past_key_values
+        return outputs.logits.astype(jnp.float32)
 
     def prefill(
         self,
@@ -61,7 +81,9 @@ class GemmaAdapter:
         kv_cache: KVCacheState,
         page_table: jnp.ndarray,
     ) -> PrefillResult:
-        return self.backend.prefill(token_ids, kv_cache, page_table)
+        input_ids = jnp.asarray(token_ids, dtype=jnp.int32)[None, :]
+        logits = self._forward(input_ids, update_cache=True)
+        return PrefillResult(logits=logits[0], kv_cache=kv_cache)
 
     def decode(
         self,
@@ -70,7 +92,14 @@ class GemmaAdapter:
         kv_cache: KVCacheState,
         page_table: jnp.ndarray,
     ) -> DecodeResult:
-        return self.backend.decode(token_id, position, kv_cache, page_table)
+        input_ids = jnp.array([[int(token_id)]], dtype=jnp.int32)
+        logits = self._forward(
+            input_ids,
+            past_key_values=self._past_key_values,
+            update_cache=True,
+        )
+        next_token = int(jnp.argmax(logits[0, -1]))
+        return DecodeResult(logits=logits[0], kv_cache=kv_cache, next_token=next_token)
 
     def verify(
         self,
@@ -79,14 +108,48 @@ class GemmaAdapter:
         kv_cache: KVCacheState,
         page_table: jnp.ndarray,
     ) -> VerifyResultModel:
-        return self.backend.verify(token_ids_kp1, positions, kv_cache, page_table)
+        input_ids = jnp.asarray(token_ids_kp1, dtype=jnp.int32)[None, :]
+        logits = self._forward(
+            input_ids,
+            past_key_values=self._past_key_values,
+            update_cache=False,
+        )
+        return VerifyResultModel(logits=logits, kv_cache=kv_cache)
+
+    def commit_tokens(self, token_ids: list[int]) -> None:
+        for tok in token_ids:
+            input_ids = jnp.array([[int(tok)]], dtype=jnp.int32)
+            self._forward(
+                input_ids,
+                past_key_values=self._past_key_values,
+                update_cache=True,
+            )
+
+    def draft_speculate(
+        self,
+        prefix_tokens: list[int],
+        k: int,
+    ) -> tuple[list[int], jnp.ndarray]:
+        saved = self._past_key_values
+        self.reset_cache()
+        pre = self.prefill(
+            jnp.array(prefix_tokens, dtype=jnp.int32),
+            self._dummy_kv,
+            jnp.zeros((1,), dtype=jnp.int32),
+        )
+        token = int(jnp.argmax(pre.logits[-1]))
+        logits_list = []
+        spec: list[int] = []
+        for _ in range(k):
+            dec = self.decode(token, 0, self._dummy_kv, jnp.zeros((1,), dtype=jnp.int32))
+            logits_list.append(dec.logits[-1])
+            token = dec.next_token
+            spec.append(token)
+        self._past_key_values = saved
+        return spec, jnp.stack(logits_list)
 
     def decode_tokens_to_str(self, token_ids: list[int]) -> str:
-        if self._tokenizer is not None:
-            return self._tokenizer.decode(token_ids, skip_special_tokens=True)
-        return self.backend.decode_tokens_to_str(token_ids)
+        return self._tokenizer.decode(token_ids, skip_special_tokens=True)
 
     def tokenize(self, text: str) -> list[int]:
-        if self._tokenizer is not None:
-            return self._tokenizer.encode(text)
-        return [ord(c) % 512 for c in text]
+        return list(self._tokenizer.encode(text, add_special_tokens=True))

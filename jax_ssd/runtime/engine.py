@@ -17,7 +17,8 @@ from jax_ssd.algorithm.instance_prior import (
 )
 from jax_ssd.algorithm.verify import verify_greedy
 from jax_ssd.config import DecodeMode, SSDConfig
-from jax_ssd.models.toy_model import ToyModelAdapter
+from jax_ssd.models.base import DecodeModelAdapter
+from jax_ssd.models.model_loader import load_model_adapter
 from jax_ssd.runtime.metrics import MetricsCollector, RunMetrics, StepMetrics
 from jax_ssd.runtime.page_manager import PageManager
 from jax_ssd.runtime.scheduler import Scheduler
@@ -41,8 +42,24 @@ class LLMEngine:
             num_blocks=config.num_blocks,
         )
         self.scheduler = Scheduler(config, self.page_manager)
-        self.target = ToyModelAdapter()
-        self.draft = ToyModelAdapter(seed=1)
+        share_key = None
+        if (
+            not config.use_toy_model
+            and config.target_model_path
+            and config.target_model_path == config.draft_model_path
+        ):
+            share_key = f"shared:{config.target_model_path}"
+        self.target = load_model_adapter(
+            config.target_model_path,
+            use_toy=config.use_toy_model,
+            share_key=share_key,
+        )
+        self.draft = load_model_adapter(
+            config.draft_model_path,
+            use_toy=config.use_toy_model,
+            seed=1,
+            share_key=share_key,
+        )
         self.draft_worker: DraftWorker | None = None
         if config.mode in (DecodeMode.SSD, DecodeMode.INSTANCE):
             self.draft_worker = DraftWorker(config, self.draft)
@@ -99,12 +116,17 @@ class LLMEngine:
 
     def _decode_callback(
         self,
-        model: ToyModelAdapter,
+        model: DecodeModelAdapter,
         token: int,
         on_token: TokenCallback | None,
     ) -> None:
         if on_token:
             on_token(token, model.decode_tokens_to_str([token]))
+
+    def _commit(self, model: DecodeModelAdapter, token_ids: list[int]) -> None:
+        commit = getattr(model, "commit_tokens", None)
+        if commit is not None:
+            commit(token_ids)
 
     def _run_ar(
         self,
@@ -169,6 +191,7 @@ class LLMEngine:
                 self._decode_callback(self.target, tok, on_token)
             seq.append_token(recovery)
             self._decode_callback(self.target, recovery, on_token)
+            self._commit(self.target, accepted + [recovery])
 
             collector.record_step(
                 StepMetrics(
@@ -226,6 +249,7 @@ class LLMEngine:
                 self._decode_callback(self.target, tok, on_token)
             seq.append_token(recovery)
             self._decode_callback(self.target, recovery, on_token)
+            self._commit(self.target, accepted + [recovery])
 
             collector.record_step(
                 StepMetrics(

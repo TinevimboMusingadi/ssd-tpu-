@@ -46,7 +46,6 @@ class SSDTpuApp(App):
         super().__init__()
         self.prompt_text = prompt
         self.max_tokens = max_tokens
-        self.prompt_ids = [ord(c) % 64 for c in prompt]
 
     def compose(self) -> ComposeResult:
         topo = probe_devices()
@@ -79,7 +78,7 @@ class SSDTpuApp(App):
             self.call_from_thread(panel.on_token, tok, decoded)
 
         sampling = SamplingParams(max_new_tokens=self.max_tokens)
-        llm.generate([self.prompt_ids], sampling, on_token=on_token)
+        llm.generate([self.prompt_text], sampling, on_token=on_token)
         llm.shutdown()
 
 
