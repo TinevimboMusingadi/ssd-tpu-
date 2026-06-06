@@ -25,8 +25,10 @@ pip install -e ".[dev]"
 python -m connect.diagnostics
 pytest tests/ -q
 
-# TPU VM setup
+# TPU VM setup (after git clone + cp .env.example .env)
+sudo apt-get update && sudo apt-get install -y python3-pip python3-venv
 ./scripts/setup_tpu_vm.sh
+source .venv/bin/activate
 ```
 
 Copy `.env.example` to `.env` and set `GCP_PROJECT` and `TPU_ZONE`.
