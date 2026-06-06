@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 PRESETS: dict[str, str] = {
     "gemma-2b": "google/gemma-2b-it",
@@ -15,6 +18,8 @@ PRESETS: dict[str, str] = {
 
 
 def main() -> None:
+    load_dotenv()
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo", help="HF repo id, e.g. google/gemma-2b-it")
     parser.add_argument(
@@ -37,7 +42,14 @@ def main() -> None:
 
     print(f"Downloading {repo} -> {out}")
     if not token:
-        print("Tip: set HF_TOKEN in .env (accept Gemma license on huggingface.co first).")
+        print("ERROR: HF_TOKEN not set.")
+        print("1. Accept license: https://huggingface.co/google/gemma-2b-it")
+        print("2. Create token: https://huggingface.co/settings/tokens")
+        print("3. Add to ~/ssd-tpu-/.env:  HF_TOKEN=hf_...")
+        print("   Or run from Windows: .\\scripts\\push_hf_token.ps1")
+        sys.exit(1)
+
+    print("HF_TOKEN found — starting download...")
 
     path = snapshot_download(
         repo_id=repo,
