@@ -51,11 +51,27 @@ def main() -> None:
 
     print("HF_TOKEN found — starting download...")
 
-    path = snapshot_download(
-        repo_id=repo,
-        local_dir=str(out),
-        token=token,
-    )
+    try:
+        path = snapshot_download(
+            repo_id=repo,
+            local_dir=str(out),
+            token=token,
+        )
+    except Exception as exc:
+        msg = str(exc)
+        print(f"Download failed: {exc}")
+        if "403" in msg or "gated" in msg.lower() or "401" in msg:
+            print()
+            print("Fix Hugging Face access:")
+            print(f"  1. Open https://huggingface.co/{repo} and click 'Agree and access'")
+            print("  2. Use a Classic token (Read) OR a fine-grained token with")
+            print("     'Access public gated repositories' enabled:")
+            print("     https://huggingface.co/settings/tokens")
+            print("  3. Update HF_TOKEN in .env, then re-run:")
+            print("     python scripts/push_hf_token.py   # from Windows")
+            print("     python scripts/download_models.py --preset gemma-2b")
+        sys.exit(1)
+
     print(f"Downloaded to {path}")
     print(f"Set in .env: TARGET_MODEL_PATH={out}")
 

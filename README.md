@@ -40,8 +40,9 @@ Copy `.env.example` to `.env` and set `GCP_PROJECT`, `TPU_ZONE`, and `HF_TOKEN`.
 
 ### Download Gemma weights (required for real inference)
 
-1. Accept the [Gemma license](https://huggingface.co/google/gemma-2b-it) on Hugging Face.
-2. Create an HF token and set `HF_TOKEN` in `.env`.
+1. Accept the [Gemma license](https://huggingface.co/google/gemma-2b-it) on Hugging Face (same account as your token).
+2. Create a **Classic** HF token with **Read** access, or a fine-grained token with **“Access public gated repositories”** enabled ([token settings](https://huggingface.co/settings/tokens)).
+3. Set `HF_TOKEN` in `.env` and push to the VM: `python scripts/push_hf_token.py`
 3. On the TPU VM:
 
 ```bash
