@@ -18,6 +18,8 @@ from tui.panels import AlgorithmPanel
 
 
 class SSDTpuApp(App):
+    SCREENS = {}
+
     CSS = """
     AlgorithmPanel {
         width: 1fr;
@@ -38,7 +40,7 @@ class SSDTpuApp(App):
     }
     """
 
-    MODES = ["ar", "sd", "ssd", "instance"]
+    ALGO_MODES = ("ar", "sd", "ssd", "instance")
 
     def __init__(self, prompt: str, max_tokens: int = 48) -> None:
         super().__init__()
@@ -55,13 +57,13 @@ class SSDTpuApp(App):
             id="status-bar",
         )
         with Horizontal():
-            for mode in self.MODES:
+            for mode in self.ALGO_MODES:
                 yield AlgorithmPanel(mode, id=f"panel-{mode}")
         yield Static(f"Prompt: {self.prompt_text}", id="prompt-bar")
         yield Footer()
 
     def on_mount(self) -> None:
-        for mode in self.MODES:
+        for mode in self.ALGO_MODES:
             thread = threading.Thread(
                 target=self._run_mode,
                 args=(mode,),

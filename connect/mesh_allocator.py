@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from typing import Literal
 
 import jax
-from jax.sharding import Mesh, PartitionSpec as P
+import numpy as np
+from jax.sharding import Mesh
 
 from connect.slice_probe import DeviceTopology, probe_devices
 
@@ -82,9 +83,18 @@ def allocate_meshes(
 
 
 def _make_mesh(devices: tuple[jax.Device, ...], name: str) -> Mesh:
-    if len(devices) == 1:
+    """Build a Mesh whose device array ndim matches axis_names (JAX requirement)."""
+    n = len(devices)
+    if n == 0:
+        raise ValueError(f"cannot build {name} mesh with zero devices")
+    if n == 1:
         return Mesh(devices, axis_names=("model",))
-    return Mesh(devices, axis_names=("data", "model"))
+    if n == 2:
+        return Mesh(np.array(devices).reshape(1, 2), axis_names=("data", "model"))
+    if n == 4:
+        return Mesh(np.array(devices).reshape(2, 2), axis_names=("data", "model"))
+    # 3, 5, 6, 7, ... — use one axis (e.g. v6e-4 split 3+1)
+    return Mesh(devices, axis_names=("devices",))
 
 
 class TPUConnector:
