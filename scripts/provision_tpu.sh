@@ -15,7 +15,7 @@ fi
 
 FAMILY="${1:-v6e}"
 ZONE="${2:-${TPU_ZONE:-us-east5-a}}"
-CHIPS="${3:-${TPU_SLICE_CHIPS:-16}}"
+CHIPS="${3:-${TPU_SLICE_CHIPS:-8}}"
 PROJECT="${GCP_PROJECT:?Set GCP_PROJECT in .env}"
 
 if [ -n "${4:-}" ]; then
@@ -40,6 +40,10 @@ _update_env() {
 
 case "$FAMILY" in
   v6e)
+    case "$CHIPS" in
+      1|4|8) ;;
+      *) echo "v6e supports chip counts: 1, 4, 8 (not $CHIPS). Use 8 for Gemma 7B+2B."; exit 1 ;;
+    esac
     MACHINE="ct6e-standard-${CHIPS}t"
     gcloud compute instances create "$NAME" \
       --project="$PROJECT" \

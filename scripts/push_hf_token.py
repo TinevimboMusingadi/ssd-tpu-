@@ -26,7 +26,7 @@ def main() -> None:
 
     project = os.getenv("GCP_PROJECT", "tpu-builder1")
     zone = os.getenv("TPU_ZONE", "us-east5-a")
-    vm = os.getenv("TPU_VM_NAME", "ssd-tpu-v6e-16-vm")
+    vm = os.getenv("TPU_VM_NAME", "ssd-tpu-v6e-8-vm")
     gcs = os.getenv("GCS_BUCKET")
     profile_name = os.getenv("MODEL_PROFILE", "sd-pair-7b")
 

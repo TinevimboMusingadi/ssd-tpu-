@@ -1,11 +1,13 @@
 # Provision TPU VM from .env and write SSH settings back to .env
-# Usage: .\scripts\provision_tpu.ps1 [-Family v6e] [-ChipCount 16] [-VmName ssd-tpu-v6e-16-vm]
+# Usage: .\scripts\provision_tpu.ps1 [-Family v6e] [-ChipCount 8] [-VmName ssd-tpu-v6e-8-vm]
+# v6e in us-east5-a/b: ct6e-standard-1t, 4t, 8t only (no 16t).
 param(
     [ValidateSet("v6e", "v5p")]
     [string]$Family = "v6e",
-    [ValidateSet(4, 8, 16, 32, 64, 128)]
-    [int]$ChipCount = 16,
+    [ValidateSet(1, 4, 8, 16, 32, 64, 128)]
+    [int]$ChipCount = 8,
     [string]$VmName = "",
+    [string]$Zone = "",
     [int]$MaxRunHours = 4
 )
 
@@ -13,7 +15,8 @@ $ErrorActionPreference = "Stop"
 . (Join-Path $PSScriptRoot "load_env.ps1")
 
 if (-not $GCP_PROJECT) { throw "GCP_PROJECT missing in .env" }
-if (-not $TPU_ZONE) { throw "TPU_ZONE missing in .env" }
+if ($Zone) { $TPU_ZONE = $Zone }
+if (-not $TPU_ZONE) { throw "TPU_ZONE missing in .env (or pass -Zone)" }
 
 if (-not $VmName) {
     if ($env:TPU_VM_NAME) {
@@ -28,6 +31,10 @@ if (-not $VmName) {
 if ($Family -eq "v5p") {
     $MachineType = "ct5p-hightpu-${ChipCount}t"
 } else {
+    $V6eAllowed = @(1, 4, 8)
+    if ($ChipCount -notin $V6eAllowed) {
+        throw "v6e in $TPU_ZONE supports chip counts: $($V6eAllowed -join ', '). Got $ChipCount. Use -ChipCount 8 for Gemma 7B+2B."
+    }
     $MachineType = "ct6e-standard-${ChipCount}t"
 }
 
@@ -43,6 +50,7 @@ Write-Host "Machine:   $MachineType"
 Write-Host "Max run:   $maxRun"
 Write-Host ""
 Write-Host "Note: request-valid-for-duration max is 2h for FLEX_START."
+Write-Host "v6e max per VM is 8 chips (no ct6e-standard-16t). Run .\scripts\list_tpu_capacity.ps1 for zones."
 
 gcloud config set project $GCP_PROJECT | Out-Null
 

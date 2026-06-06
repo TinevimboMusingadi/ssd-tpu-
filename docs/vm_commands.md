@@ -9,7 +9,7 @@ export JAX_PLATFORMS=tpu
 export SSD_USE_TOY_MODEL=0
 ```
 
-## First-time bootstrap (v6e-16)
+## First-time bootstrap (v6e-8 — max in us-east5-a)
 
 ```bash
 git pull
@@ -62,6 +62,6 @@ Quit with `q`.
 ## Windows: provision + push profile
 
 ```powershell
-.\scripts\provision_tpu.ps1 -ChipCount 16
+.\scripts\provision_tpu.ps1 -ChipCount 8
 python scripts/push_hf_token.py
 ```
