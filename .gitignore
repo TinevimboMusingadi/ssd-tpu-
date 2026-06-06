@@ -12,3 +12,4 @@ build/
 data/
 *.log
 .DS_Store
+commit_all_files.ps1
