@@ -13,3 +13,6 @@ data/
 *.log
 .DS_Store
 commit_all_files.ps1
+/models/
+gemma4-patch*.tar.gz
+.venv311/
