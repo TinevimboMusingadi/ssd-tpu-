@@ -12,7 +12,8 @@ from dotenv import load_dotenv
 
 def main() -> None:
     load_dotenv()
-    token = os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
+    token = (os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN") or "").strip()
+    token = token.strip("\ufeff").strip("\r\n")
     if not token or not token.startswith("hf_"):
         print("ERROR: set HF_TOKEN=hf_... in .env")
         sys.exit(1)

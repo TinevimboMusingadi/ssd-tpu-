@@ -25,9 +25,9 @@ python -m pip install -e .
 python -m pip install "git+https://github.com/erfanzar/EasyDeL.git" pillow
 python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 
-# JAX 0.9.2 + libtpu>=0.0.40 (ejkernel pins jax~=0.9; jax 0.10 breaks EasyDeL stack)
-python -m pip install -U "jax[tpu]==0.9.2" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+# JAX 0.9.2 + libtpu>=0.0.40 (install libtpu first; jax[tpu] pins libtpu 0.0.37)
 python -m pip install -U "libtpu>=0.0.40" -f https://storage.googleapis.com/libtpu-releases/index.html
+python -m pip install -U "jax==0.9.2" "jaxlib==0.9.2"
 
 export ENABLE_DISTRIBUTED_INIT=0
 python -c "import easydel; print('OK:', __import__('sys').version, 'easydel', easydel.__version__)"

@@ -32,16 +32,18 @@ if [[ -z "${HF_TOKEN}" ]]; then
   exit 1
 fi
 
-if ! hf auth whoami --token "$HF_TOKEN" >/dev/null 2>&1; then
-  echo "ERROR: HF_TOKEN in .env is invalid or expired."
-  echo "  1. Open https://huggingface.co/settings/tokens"
-  echo "  2. Create a new token (type: Read)"
-  echo "  3. Accept Gemma license: https://huggingface.co/google/gemma-4-E2B-it"
-  echo "  4. Update HF_TOKEN in ~/ssd-tpu-/.env (no quotes, no spaces)"
-  echo "  5. Re-run: bash scripts/fix_vm_gemma4.sh"
+python scripts/diagnose_hf_token.py || {
+  echo ""
+  echo "VM .env is out of sync with your working token (Colab uses its own login)."
+  echo "From your Windows PC (in this repo):  python scripts/push_hf_token.py"
+  echo "Or:  gcloud compute scp .env ssd-tpu-v6e-4-vm:~/ssd-tpu-/.env --zone=us-east5-b --project=tpu-builder1"
   exit 1
-fi
+}
 
+unset HF_TOKEN
+set -a && source .env && set +a
+HF_TOKEN="$(printf '%s' "${HF_TOKEN:-}" | tr -d '\r\n\ufeff' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+export HF_TOKEN
 hf auth login --token "$HF_TOKEN"
 
 # Drop stale partial downloads from unauthenticated fetches
