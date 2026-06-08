@@ -22,21 +22,7 @@ if (Test-Path $EnvFile) {
     }
 }
 
-$Remote = @"
-cd ~/ssd-tpu-
-git fetch origin && git reset --hard origin/main
-chmod +x scripts/*.sh
-mkdir -p logs
-if pgrep -f overnight_gemma4.sh >/dev/null; then
-  echo 'Already running. tail -f logs/overnight-*.log'
-  exit 0
-fi
-nohup bash scripts/overnight_gemma4.sh > logs/overnight-nohup.log 2>&1 &
-echo "Started PID \$!"
-echo "Watch: tail -f ~/ssd-tpu-/logs/overnight-*.log"
-sleep 2
-tail -n 20 logs/overnight-nohup.log 2>/dev/null || true
-"@
+$Remote = "cd ~/ssd-tpu- && git fetch origin && git reset --hard origin/main && chmod +x scripts/*.sh && mkdir -p logs && (pgrep -f overnight_gemma4.sh >/dev/null && echo ALREADY_RUNNING || (nohup bash scripts/overnight_gemma4.sh > logs/overnight-nohup.log 2>&1 & echo STARTED)) && sleep 3 && tail -n 15 logs/overnight-nohup.log 2>/dev/null || true"
 
 Write-Host "=== starting overnight job on $Vm ==="
 & gcloud compute ssh $Vm --zone=$Zone --project=$Project --command=$Remote
