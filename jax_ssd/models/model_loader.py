@@ -7,6 +7,7 @@ import os
 from typing import TYPE_CHECKING
 
 from jax_ssd.models.base import DecodeModelAdapter
+from jax_ssd.models.gemma4_adapter import Gemma4Adapter
 from jax_ssd.models.gemma_adapter import GemmaAdapter
 from jax_ssd.models.toy_model import ToyModelAdapter
 
@@ -15,6 +16,11 @@ if TYPE_CHECKING:
     from jax.sharding import Mesh
 
 logger = logging.getLogger(__name__)
+
+
+def _is_gemma4_path(path: str) -> bool:
+    p = path.lower()
+    return "gemma-4" in p or "gemma4" in p or "gemma_4" in p
 
 
 def default_target_path() -> str:
@@ -46,6 +52,15 @@ def load_model_adapter(
         return ToyModelAdapter(seed=seed)
 
     path = model_path or (default_target_path() if role == "target" else default_draft_path())
+
+    if _is_gemma4_path(path):
+        return Gemma4Adapter(
+            model_path=path,
+            share_key=share_key,
+            mesh=mesh,
+            devices=devices,
+            role=role,
+        )
 
     try:
         return GemmaAdapter(
