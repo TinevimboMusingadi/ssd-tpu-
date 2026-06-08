@@ -18,11 +18,13 @@ PRESETS: dict[str, str] = {
 
 SD_PAIR_2B = ("google/gemma-2-2b-it", "google/gemma-2b-it")
 SD_PAIR_7B = ("google/gemma-7b-it", "google/gemma-2b-it")
+SD_PAIR_GEMMA4_E2B = ("google/gemma-4-E2B-it", "google/gemma-4-E2B-it-assistant")
 
 PAIR_PRESETS: dict[str, tuple[str, str]] = {
     "sd-pair": SD_PAIR_2B,
     "sd-pair-2b": SD_PAIR_2B,
     "sd-pair-7b": SD_PAIR_7B,
+    "sd-pair-gemma4-e2b": SD_PAIR_GEMMA4_E2B,
 }
 
 
@@ -44,13 +46,33 @@ def _download_one(repo: str, output: Path, token: str) -> Path:
     except Exception as exc:
         msg = str(exc)
         print(f"Download failed: {exc}")
-        if "403" in msg or "gated" in msg.lower() or "401" in msg:
-            print()
-            print("Fix Hugging Face access:")
-            print(f"  1. Open https://huggingface.co/{repo} and click 'Agree and access'")
-            print("  2. Use a Classic token (Read) OR fine-grained with gated repos enabled")
-            print("  3. Update HF_TOKEN, then: python scripts/push_hf_token.py")
+        _print_hf_access_help(repo, token)
         sys.exit(1)
+
+
+def _print_hf_access_help(repo: str, token: str) -> None:
+    print()
+    print("Fix Hugging Face access:")
+    print(f"  1. Open https://huggingface.co/{repo} and click 'Agree and access'")
+    print("  2. Token must be Classic (Read) OR fine-grained with")
+    print("     'Read access to contents of all public gated repos' enabled")
+    try:
+        import requests
+
+        r = requests.get(
+            "https://huggingface.co/api/whoami-v2",
+            headers={"Authorization": f"Bearer {token}"},
+            timeout=15,
+        )
+        if r.ok:
+            auth = r.json().get("auth", {}).get("accessToken", {})
+            if auth.get("role") == "fineGrained":
+                fg = auth.get("fineGrained", {})
+                if not fg.get("canReadGatedRepos"):
+                    print("  3. Your fine-grained token has canReadGatedRepos=False — create a new token")
+    except Exception:
+        pass
+    print("  4. Update HF_TOKEN in .env, then: py scripts/push_hf_token.py")
 
 
 def _maybe_upload(local_path: Path, gcs_uri: str | None) -> str:
