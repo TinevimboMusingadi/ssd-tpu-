@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Run Gemma 4 E2B AR on TPU VM (Python 3.11 + EasyDeL from git).
+set -euo pipefail
+cd ~/ssd-tpu-
+
+if [[ -d .venv311 ]]; then
+  source .venv311/bin/activate
+else
+  source .venv/bin/activate
+fi
+
+sed -i 's/\r$//' .env 2>/dev/null || true
+set -a
+source .env
+set +a
+
+export JAX_PLATFORMS=tpu
+export EASYDEL_AUTO=1
+export ENABLE_DISTRIBUTED_INIT=0
+export SSD_USE_TOY_MODEL=0
+export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
+mkdir -p "$HF_HOME"
+
+python -m jax_ssd.benchmarks.stream_prompt \
+  --mode ar \
+  --prompt "${1:-What is gravity?}" \
+  --max-tokens "${2:-24}"
