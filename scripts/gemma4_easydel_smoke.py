@@ -25,7 +25,16 @@ def main() -> None:
 
     print("devices", jax.devices())
     tok = AutoTokenizer.from_pretrained("google/gemma-4-E2B-it", token=token)
-    ids = tok.encode(prompt, add_special_tokens=True)
+    chat_prompt = prompt
+    if hasattr(tok, "apply_chat_template"):
+        chat_prompt = tok.apply_chat_template(
+            [{"role": "user", "content": prompt}],
+            add_generation_prompt=True,
+            tokenize=False,
+        )
+        ids = tok.encode(chat_prompt, add_special_tokens=False)
+    else:
+        ids = tok.encode(prompt, add_special_tokens=True)
     print("prompt tokens", len(ids))
 
     fsdp = max(1, len(jax.devices()))
@@ -48,10 +57,10 @@ def main() -> None:
             hbm_utilization=0.85,
             sharding_axis_dims=(1, 1, 1, fsdp, 1),
         )
-        prompt = tok.decode(ids, skip_special_tokens=False)
+        prompt_text = chat_prompt
         sampling = ed.SamplingParams(max_tokens=max_new, temperature=0.0, top_p=1.0)
         print("generating...", flush=True)
-        outputs = engine.generate(prompt, sampling_params=sampling)
+        outputs = engine.generate(prompt_text, sampling_params=sampling)
         out = outputs[0].outputs[0]
         text = getattr(out, "text", str(out))
         new_ids = tok.encode(text, add_special_tokens=False)

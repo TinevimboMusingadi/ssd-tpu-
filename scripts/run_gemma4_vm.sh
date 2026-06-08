@@ -26,6 +26,13 @@ export SSD_TPU_ROLE=target
 export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
 mkdir -p "$HF_HOME"
 
+# Optional: restore weights from GCS once (see scripts/snapshot_gemma4_to_gcs.sh)
+if [[ -n "${GEMMA4_GCS_CACHE:-}" ]] || [[ -n "${GCS_BUCKET:-}" ]]; then
+  bash scripts/restore_gemma4_from_gcs.sh 2>/dev/null || true
+fi
+
+python scripts/verify_gemma4_weights.py || true
+
 python -m jax_ssd.benchmarks.stream_prompt \
   --mode ar \
   --prompt "${1:-What is gravity?}" \
