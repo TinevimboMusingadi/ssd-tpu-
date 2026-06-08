@@ -15,20 +15,48 @@ from dotenv import load_dotenv
 from connect.profiles import get_profile, profile_env_defaults
 
 
+def _read_env_file(path: Path) -> dict[str, str]:
+    """Parse .env file directly (ignores stale shell HF_TOKEN)."""
+    if not path.exists():
+        return {}
+    raw = path.read_bytes()
+    if raw.startswith(b"\xef\xbb\xbf"):
+        raw = raw[3:]
+    out: dict[str, str] = {}
+    for line in raw.decode("utf-8", errors="replace").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, val = line.split("=", 1)
+        out[key.strip()] = val.strip().strip("\r\n").strip('"' "'")
+    return out
+
+
+def _mask(token: str) -> str:
+    return f"{token[:7]}...{token[-4:]}" if len(token) >= 12 else "(too short)"
+
+
 def main() -> None:
     root = Path(__file__).resolve().parents[1]
-    load_dotenv(root / ".env")
+    env_file = root / ".env"
+    file_vars = _read_env_file(env_file)
+    # File wins over shell env (Windows often has stale HF_TOKEN exported).
+    load_dotenv(env_file, override=True)
 
-    token = os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
+    token = file_vars.get("HF_TOKEN") or os.getenv("HF_TOKEN") or os.getenv("HUGGING_FACE_HUB_TOKEN")
     if not token or not token.startswith("hf_"):
         print("ERROR: set HF_TOKEN=hf_... in .env", file=sys.stderr)
         sys.exit(1)
 
-    project = os.getenv("GCP_PROJECT", "tpu-builder1")
-    zone = os.getenv("TPU_ZONE", "us-east5-a")
-    vm = os.getenv("TPU_VM_NAME", "ssd-tpu-v6e-8-vm")
-    gcs = os.getenv("GCS_BUCKET")
-    profile_name = os.getenv("MODEL_PROFILE", "sd-pair-7b")
+    shell_token = os.environ.get("HF_TOKEN", "")
+    if shell_token and shell_token != token:
+        print(f"NOTE: shell HF_TOKEN ({_mask(shell_token)}) ignored; using .env ({_mask(token)})")
+
+    project = file_vars.get("GCP_PROJECT") or os.getenv("GCP_PROJECT", "tpu-builder1")
+    zone = file_vars.get("TPU_ZONE") or os.getenv("TPU_ZONE", "us-east5-b")
+    vm = file_vars.get("TPU_VM_NAME") or os.getenv("TPU_VM_NAME", "ssd-tpu-v6e-4-vm")
+    gcs = file_vars.get("GCS_BUCKET") or os.getenv("GCS_BUCKET")
+    profile_name = file_vars.get("MODEL_PROFILE") or os.getenv("MODEL_PROFILE", "sd-pair-7b")
 
     profile = get_profile(profile_name)
     defaults = profile_env_defaults(profile, gcs)
@@ -112,9 +140,10 @@ print("Synced keys:", ", ".join(sorted(data.keys())))
         f"--project={project}",
         f"--command={remote_cmd}",
     ]
-    print(f"Pushing profile '{profile.name}' to {vm}...")
+    print(f"Pushing HF_TOKEN {_mask(token)} to {vm} ({zone})...")
     subprocess.run(cmd, check=True, shell=False)
-    print("Done. On VM: ./scripts/bootstrap_vm.sh --profile", profile.name)
+    print("Done. On VM run:")
+    print("  unset HF_TOKEN && source .env && python scripts/diagnose_hf_token.py")
 
 
 if __name__ == "__main__":
