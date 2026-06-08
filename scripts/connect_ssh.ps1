@@ -12,7 +12,7 @@ if (-not $TPU_ZONE) { throw "TPU_ZONE missing in .env" }
 $VmName = if ($TPU_VM_NAME) { $TPU_VM_NAME } else { "ssd-tpu-v6e-vm" }
 
 if (-not $TPU_SSH_HOST) {
-    Write-Host "TPU_SSH_HOST empty — fetching from gcloud..."
+    Write-Host "TPU_SSH_HOST empty - fetching from gcloud..."
     $TPU_SSH_HOST = gcloud compute instances describe $VmName `
         --zone=$TPU_ZONE `
         --project=$GCP_PROJECT `
