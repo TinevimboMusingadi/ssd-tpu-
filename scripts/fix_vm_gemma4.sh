@@ -46,9 +46,7 @@ HF_TOKEN="$(printf '%s' "${HF_TOKEN:-}" | tr -d '\r\n\ufeff' | sed 's/^[[:space:
 export HF_TOKEN
 hf auth login --token "$HF_TOKEN"
 
-# Drop stale partial downloads from unauthenticated fetches
-rm -rf "${HF_HOME:-$HOME/.cache/huggingface}/hub/models--EasyDeL--gemma-4-E2B-it"
-
+# Resume/complete download (skip rm — partial cache can block rm -rf on VM)
 hf download EasyDeL/gemma-4-E2B-it
 
 echo "=== versions ==="
