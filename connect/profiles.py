@@ -52,6 +52,13 @@ PROFILES: dict[str, ModelProfile] = {
         min_chips=4,
         description="Alias for sd-pair-2b",
     ),
+    "sd-pair-gemma4-e2b": ModelProfile(
+        name="sd-pair-gemma4-e2b",
+        target_repo="google/gemma-4-E2B-it",
+        draft_repo="google/gemma-4-E2B-it-assistant",
+        min_chips=4,
+        description="Gemma 4 E2B target + assistant draft (EasyDeL on TPU, AR today)",
+    ),
 }
 
 
@@ -67,6 +74,11 @@ def profile_env_defaults(profile: ModelProfile, gcs_bucket: str | None) -> dict[
     out: dict[str, str] = {
         "MODEL_PROFILE": profile.name,
     }
+    # Gemma 4: load from HF hub (Apache 2.0, not gated); EasyDeL maps to JAX weights.
+    if profile.name.startswith("sd-pair-gemma4"):
+        out["TARGET_MODEL_PATH"] = profile.target_repo
+        out["DRAFT_MODEL_PATH"] = profile.draft_repo
+        return out
     if gcs_bucket:
         prefix = os.getenv("GCS_MODEL_PREFIX", "models")
         out["TARGET_MODEL_PATH"] = profile.target_gcs_path(gcs_bucket, prefix)
