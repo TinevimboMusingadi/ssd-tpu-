@@ -163,6 +163,26 @@ class LLMEngine:
         on_token: TokenCallback | None,
         collector: MetricsCollector,
     ) -> list[int]:
+        gen_ar = getattr(self.target, "generate_ar", None)
+        if gen_ar is not None:
+            t0 = time.perf_counter()
+            generated = gen_ar(
+                list(seq.prompt_token_ids),
+                sampling.max_new_tokens,
+                on_token,
+            )
+            if generated:
+                collector.record_first_token()
+            for tok in generated:
+                seq.append_token(tok)
+            collector.record_step(
+                StepMetrics(
+                    target_verify_ms=(time.perf_counter() - t0) * 1000,
+                    accepted_tokens=len(generated),
+                )
+            )
+            return seq.completion_token_ids
+
         kv = self.target.allocate_kv()
         page_table = jnp.zeros((self.config.num_blocks,), dtype=jnp.int32)
         pre = self.target.prefill(jnp.array(seq.prompt_token_ids), kv, page_table)
