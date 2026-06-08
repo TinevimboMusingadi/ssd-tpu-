@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Python 3.11 venv for Gemma 4 + EasyDeL git on TPU VM.
 set -euo pipefail
 
 cd ~/ssd-tpu-
@@ -17,12 +18,17 @@ fi
 source .venv311/bin/activate
 python -m pip install -U pip wheel
 
-# JAX TPU + libtpu (JAX 0.9.x needs libtpu >=0.0.40 for Mosaic v11)
-python -m pip install -U "jax[tpu]" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
+# Base project deps only (avoid pip easydel 0.2.x fighting git easydel 0.3.x)
+python -m pip install -e .
+
+# EasyDeL git (Gemma 4) + CPU torch for import hooks
+python -m pip install "git+https://github.com/erfanzar/EasyDeL.git" pillow
+python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+# JAX + libtpu LAST — libtpu>=0.0.40 required for JAX 0.9+ Mosaic v11
+python -m pip install -U "jax[tpu]>=0.9.2" -f https://storage.googleapis.com/jax-releases/libtpu_releases.html
 python -m pip install -U "libtpu>=0.0.40" -f https://storage.googleapis.com/libtpu-releases/index.html
 
-# Project + EasyDeL main (Gemma 4 + transformers 5)
-python -m pip install -e ".[tpu]"
-python -m pip install "git+https://github.com/erfanzar/EasyDeL.git" pillow
-
-echo "OK: $(python --version), easydel $(python -c 'import easydel; print(easydel.__version__)')"
+export ENABLE_DISTRIBUTED_INIT=0
+python -c "import easydel; print('OK:', __import__('sys').version, 'easydel', easydel.__version__)"
+pip show jax jaxlib libtpu | grep -E '^Name|^Version'

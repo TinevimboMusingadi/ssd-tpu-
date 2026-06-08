@@ -36,7 +36,9 @@ class LLMEngine:
             from dataclasses import replace
 
             policy = mesh_policy_from_env()
-            if config.tpu_role == "target":
+            if config.mode == DecodeMode.AR:
+                policy = "all_target"
+            elif config.tpu_role == "target":
                 policy = "all_target"
             elif config.tpu_role == "draft":
                 policy = "all_draft"

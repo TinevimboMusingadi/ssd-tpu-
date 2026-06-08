@@ -18,6 +18,8 @@ export JAX_PLATFORMS=tpu
 export EASYDEL_AUTO=1
 export ENABLE_DISTRIBUTED_INIT=0
 export SSD_USE_TOY_MODEL=0
+# AR uses all 4 chips for target (avoid 3+1 SD split reshaping Gemma4)
+export SSD_TPU_ROLE=target
 export HF_HOME="${HF_HOME:-$HOME/.cache/huggingface}"
 mkdir -p "$HF_HOME"
 
