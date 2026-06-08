@@ -118,6 +118,15 @@ def _easydel_repo(model_path: str) -> str:
     return "EasyDeL/gemma-4-E2B-it"
 
 
+def _is_esurge_engine(engine: object) -> bool:
+    """True for EasyDeL eSurge (string prompts), not legacy vInference."""
+    name = type(engine).__name__.lower()
+    if "esurge" in name:
+        return True
+    module = getattr(type(engine), "__module__", "") or ""
+    return "esurge" in module.lower()
+
+
 def _tokenizer_repo(model_path: str) -> str:
     repo = _easydel_repo(model_path)
     if "assistant" in repo:
@@ -184,12 +193,46 @@ class Gemma4Adapter:
     def allocate_kv(self) -> KVCacheState:
         return self._dummy_kv
 
+    def _format_prompt(self, text: str) -> str:
+        """Apply Gemma chat template (required for -it models)."""
+        tok = self._tokenizer
+        if hasattr(tok, "apply_chat_template"):
+            return tok.apply_chat_template(
+                [{"role": "user", "content": text}],
+                add_generation_prompt=True,
+                tokenize=False,
+            )
+        return text
+
     def tokenize(self, text: str) -> list[int]:
-        ids = self._tokenizer.encode(text, add_special_tokens=True)
+        formatted = self._format_prompt(text)
+        ids = self._tokenizer.encode(formatted, add_special_tokens=False)
         return list(ids)
 
     def decode_tokens_to_str(self, token_ids: list[int]) -> str:
         return self._tokenizer.decode(token_ids, skip_special_tokens=True)
+
+    def _extract_esurge_token_ids(self, out: object, prompt_tokens: list[int]) -> list[int]:
+        """Pull generated token IDs from an eSurge CompletionOutput."""
+        for attr in ("token_ids", "output_token_ids", "generated_token_ids"):
+            raw = getattr(out, attr, None)
+            if raw:
+                return [int(t) for t in raw]
+
+        text = (getattr(out, "text", None) or "").strip()
+        if text:
+            return list(self._tokenizer.encode(text, add_special_tokens=False))
+
+        prompt_len = len(prompt_tokens)
+        for attr in ("sequences", "output_ids", "all_token_ids"):
+            seq = getattr(out, attr, None)
+            if seq is not None:
+                arr = [int(t) for t in jnp.asarray(seq).tolist()]
+                if len(arr) > prompt_len:
+                    return arr[prompt_len:]
+
+        logger.warning("eSurge output had no token_ids or text: %r", out)
+        return []
 
     def _generated_token_ids(self, prompt_tokens: list[int], sequences) -> list[int]:
         seq = jnp.asarray(sequences)[0]
@@ -206,12 +249,11 @@ class Gemma4Adapter:
         sampling = self._SamplingParams(max_tokens=max_new_tokens, temperature=0.0, top_p=1.0)
         engine = self._esurge
 
-        if hasattr(engine, "generate") and not hasattr(engine, "model"):
+        if _is_esurge_engine(engine):
             prompt = self._tokenizer.decode(prompt_tokens, skip_special_tokens=False)
             outputs = engine.generate(prompt, sampling_params=sampling)
             out = outputs[0].outputs[0]
-            new_text = getattr(out, "text", str(out))
-            new_ids = self._tokenizer.encode(new_text, add_special_tokens=False)
+            new_ids = self._extract_esurge_token_ids(out, prompt_tokens)
         else:
             input_ids = jnp.array([prompt_tokens], dtype=jnp.int32)
             final = None
