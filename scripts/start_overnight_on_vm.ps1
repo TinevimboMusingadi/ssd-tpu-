@@ -22,7 +22,7 @@ if (Test-Path $EnvFile) {
     }
 }
 
-$Remote = "cd ~/ssd-tpu- && git fetch origin && git reset --hard origin/main && chmod +x scripts/*.sh && mkdir -p logs && (pgrep -f overnight_gemma4.sh >/dev/null && echo ALREADY_RUNNING || (nohup bash scripts/overnight_gemma4.sh > logs/overnight-nohup.log 2>&1 & echo STARTED)) && sleep 3 && tail -n 15 logs/overnight-nohup.log 2>/dev/null || true"
+$Remote = "bash ~/ssd-tpu-/scripts/launch_overnight.sh"
 
 Write-Host "=== starting overnight job on $Vm ==="
 & gcloud compute ssh $Vm --zone=$Zone --project=$Project --command=$Remote
