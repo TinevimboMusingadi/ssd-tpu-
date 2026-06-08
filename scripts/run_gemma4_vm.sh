@@ -14,6 +14,9 @@ set -a
 source .env
 set +a
 
+HF_TOKEN="$(printf '%s' "${HF_TOKEN:-}" | tr -d '\r\n\ufeff' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+export HF_TOKEN
+
 export JAX_PLATFORMS=tpu
 export EASYDEL_AUTO=1
 export ENABLE_DISTRIBUTED_INIT=0

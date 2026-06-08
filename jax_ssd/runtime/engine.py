@@ -59,7 +59,8 @@ class LLMEngine:
         ):
             share_key = f"shared:{config.target_model_path}"
         load_target = role in ("both", "target")
-        load_draft = role in ("both", "draft")
+        # AR only needs the target model; skip draft Gemma4 load (assistant weights optional).
+        load_draft = role in ("both", "draft") and config.mode != DecodeMode.AR
 
         if load_target:
             self.target = load_model_adapter(
